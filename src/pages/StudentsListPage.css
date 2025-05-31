@@ -1,0 +1,65 @@
+.students-page {
+  background-color: #4b0082;
+  min-height: 100vh;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.students-container {
+  width: 100%;
+  max-width: 400px;
+  color: white;
+}
+
+.students-title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 16px;
+}
+
+.group-select {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  background-color: #00006b;
+  color: white;
+  border: 1px solid white;
+  border-radius: 6px;
+  margin-bottom: 24px;
+}
+
+.people-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.students-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+}
+
+.students-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.student-item {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #9b59b6;
+  padding: 12px 0;
+  font-size: 14px;
+}
+
+.arrow {
+  color: #ccc;
+  font-size: 18px;
+}
