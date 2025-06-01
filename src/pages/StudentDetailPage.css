@@ -1,0 +1,47 @@
+.student-card {
+  background-color: #d9006c;
+  padding: 20px;
+  border-radius: 16px;
+  color: white;
+  max-width: 380px;
+  margin: auto;
+}
+
+.student-card h2 {
+  font-size: 20px;
+}
+
+.price {
+  font-size: 32px;
+  font-weight: bold;
+  margin: 16px 0;
+}
+
+.group-list {
+  margin: 12px 0;
+}
+
+table {
+  width: 100%;
+  margin-top: 12px;
+  background: #d9006c;
+  border-collapse: collapse;
+}
+
+table th,
+table td {
+  border-bottom: 1px solid #fff;
+  padding: 8px;
+  text-align: center;
+}
+
+.delete-button {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.swipe-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import './StudentsListPage.css';
 import AddStudentModal from '../components/AddStudentModal';
+import { useNavigate } from 'react-router-dom';
 
 function StudentsListPage() {
   const { students, groups } = useData();
@@ -11,6 +12,8 @@ function StudentsListPage() {
   const filteredStudents = selectedGroup
     ? students.filter(s => s.groups.includes(selectedGroup))
     : students;
+
+    const navigate = useNavigate();
 
   return (
     <div className="students-page">
@@ -44,8 +47,12 @@ function StudentsListPage() {
 
         <ul className="students-list">
           {filteredStudents.map(student => (
-            <li key={student.id} className="student-item">
-              <span>{student.name.toUpperCase().slice(0, 20)}</span>
+            <li
+              key={student.id}
+              className="student-item"
+              onClick={() => navigate(`/student/${student.id}`)}
+            >
+              <span>{student.name.toUpperCase().slice(0, 20)}...</span>
               <span className="arrow">{'>'}</span>
             </li>
           ))}

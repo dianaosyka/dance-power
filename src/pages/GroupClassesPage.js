@@ -1,52 +1,72 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   addDoc,
   deleteDoc,
   doc,
   query,
-  where,
   getDocs,
+  Timestamp,
 } from 'firebase/firestore';
 import { useData } from '../context/DataContext';
 import './GroupClassesPage.css';
 
-function getLastNDatesMatchingWeekday(n, weekday) {
+function getPastDatesFrom(openingDateStr, weekday) {
   const result = [];
   const today = new Date();
-  let date = new Date(today);
+  let date = new Date(openingDateStr.split('.').reverse().join('.'));
 
-  while (result.length < n) {
-    if (date.getDay() === weekday && date <= today) {
+  while (date <= today) {
+    if (date.getDay() === weekday) {
+      const dd = String(date.getDate()).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      result.unshift(`${dd}.${mm}`);
+    }
+    date.setDate(date.getDate() + 1);
+  }
+
+  return result;
+}
+
+function getNextFutureDates(startFrom, weekday, count) {
+  const result = [];
+  const date = new Date(startFrom);
+
+  while (result.length < count) {
+    if (date.getDay() === weekday) {
       const dd = String(date.getDate()).padStart(2, '0');
       const mm = String(date.getMonth() + 1).padStart(2, '0');
       result.push(`${dd}.${mm}`);
     }
-    date.setDate(date.getDate() - 1);
+    date.setDate(date.getDate() + 1);
   }
+
   return result;
 }
 
 function GroupClassesPage() {
   const { groupId } = useParams();
+  const navigate = useNavigate();
   const { groups, db } = useData();
-  const [dates, setDates] = useState([]);
+
   const [group, setGroup] = useState(null);
+  const [pastDates, setPastDates] = useState([]);
+  const [futureDates, setFutureDates] = useState([]);
   const [canceled, setCanceled] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showFuture, setShowFuture] = useState(false);
 
   useEffect(() => {
     const g = groups.find(g => g.id === groupId);
     setGroup(g);
-    if (g) {
+    if (g?.openingDate) {
       const weekday = g.dayOfWeek ?? 5;
-      setDates(getLastNDatesMatchingWeekday(10, weekday));
+      setPastDates(getPastDatesFrom(g.openingDate, weekday));
     }
   }, [groupId, groups]);
 
-  // Load canceled subcollection for this group
   useEffect(() => {
     if (!groupId) return;
     const fetchCanceled = async () => {
@@ -67,12 +87,13 @@ function GroupClassesPage() {
     const colRef = collection(db, `groups/${groupId}/canceledClasses`);
 
     if (existing) {
-      // Uncancel → delete doc
       await deleteDoc(doc(colRef, existing.id));
       setCanceled(prev => prev.filter(c => c.id !== existing.id));
     } else {
-      // Cancel → add new doc with date
-      const ref = await addDoc(colRef, { date: selectedDate });
+      const ref = await addDoc(colRef, {
+        date: selectedDate,
+        timestamp: Timestamp.now(),
+      });
       setCanceled(prev => [...prev, { id: ref.id, date: selectedDate }]);
     }
 
@@ -80,12 +101,64 @@ function GroupClassesPage() {
     setSelectedDate(null);
   };
 
+  const toggleFutureDates = () => {
+    if (!group) return;
+    if (showFuture) {
+      setShowFuture(false);
+      return;
+    }
+
+    const weekday = group.dayOfWeek ?? 5;
+    const start = new Date();
+    const future = getNextFutureDates(start, weekday, 10);
+    setFutureDates(future);
+    setShowFuture(true);
+  };
+
   return (
     <div className="group-page">
       <h2 className="group-title">{group?.name.toUpperCase()}</h2>
       <p className="group-schedule">{group?.schedule || 'FRIDAY 20:00'}</p>
 
-      <button className="students-button">STUDENTS LIST</button>
+      <button className="students-button" onClick={() => navigate('/students')}>
+  STUDENTS LIST
+</button>
+      <button className="add-cancel-button" onClick={toggleFutureDates}>
+        {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
+      </button>
+
+      {showFuture && (
+        <>
+          <h3 className="classes-heading">FUTURE CLASSES</h3>
+          <div className="classes-header">
+            <span>CLASSES DATE</span>
+            <span>IS COMPLETED</span>
+            <span>SEE MORE</span>
+          </div>
+          <ul className="class-list">
+            {futureDates.map(date => (
+              <li
+                key={date}
+                className="class-item"
+                onClick={() => {
+                  setSelectedDate(date);
+                  setShowModal(true);
+                }}
+              >
+                <span>{date}</span>
+                <span className="check">{isCanceled(date) ? '❌' : '✅'}</span>
+                <span
+                  className="arrow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/group/${groupId}/class/${date}`);
+                  }}
+                >➔</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h3 className="classes-heading">CLASSES</h3>
       <div className="classes-header">
@@ -95,7 +168,7 @@ function GroupClassesPage() {
       </div>
 
       <ul className="class-list">
-        {dates.map(date => (
+        {pastDates.map(date => (
           <li
             key={date}
             className="class-item"
@@ -106,7 +179,15 @@ function GroupClassesPage() {
           >
             <span>{date}</span>
             <span className="check">{isCanceled(date) ? '❌' : '✅'}</span>
-            <span className="arrow">{'>'}</span>
+            <span
+              className="arrow"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/group/${groupId}/class/${date}`);
+              }}
+            >
+              ➔
+            </span>
           </li>
         ))}
       </ul>

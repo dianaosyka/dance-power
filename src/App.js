@@ -6,6 +6,9 @@ import GroupsPage from './pages/GroupsPage';
 import StudentsListPage from './pages/StudentsListPage';
 import AddPaymentPage from './pages/AddPaymentPage';
 import GroupClassesPage from './pages/GroupClassesPage';
+import StudentDetailPage from './pages/StudentDetailPage';
+import GroupClassDetailPage from './pages/GroupClassDetailPage';
+
 
 
 function App() {
@@ -17,6 +20,8 @@ function App() {
           <Route path="/students" element={<StudentsListPage />} />
           <Route path="/add-payment" element={<AddPaymentPage />} />
           <Route path="/group/:groupId" element={<GroupClassesPage />} />
+          <Route path="/student/:studentId" element={<StudentDetailPage />} />
+          <Route path="/group/:groupId/class/:date" element={<GroupClassDetailPage />} />
         </Routes>
       </Router>
     </DataProvider>

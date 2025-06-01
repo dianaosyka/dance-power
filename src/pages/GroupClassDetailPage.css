@@ -1,0 +1,36 @@
+.class-detail-page {
+  background-color: #4b0082;
+  color: white;
+  min-height: 100vh;
+  padding: 20px;
+  max-width: 400px;
+  margin: auto;
+}
+
+h1 {
+  margin: 10px 0 20px;
+}
+
+.classes-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 10px;
+  border-bottom: 1px solid #999;
+  padding-bottom: 6px;
+}
+
+.student-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.class-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #9b59b6;
+}
