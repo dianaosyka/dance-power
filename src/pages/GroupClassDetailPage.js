@@ -1,37 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  collection,
-  getDocs,
-  query,
-} from 'firebase/firestore';
+import { useParams, useNavigate } from 'react-router-dom';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { useData } from '../context/DataContext';
 import './GroupClassDetailPage.css';
 
-function generateClassDates(startDateStr, weekday, count, canceled) {
-  const result = [];
-  const [dd, mm, yyyy] = startDateStr.split('.').map(Number);
-  let date = new Date(yyyy, mm - 1, dd);
-  const canceledSet = new Set(canceled);
+function generateCombinedSchedule(payments, groups, canceled, count) {
+  const allPairs = [];
 
-  while (result.length < count) {
-    if (date.getDay() === weekday) {
-      const str = `${String(date.getDate()).padStart(2, '0')}.${String(
-        date.getMonth() + 1
-      ).padStart(2, '0')}`;
-      if (!canceledSet.has(str)) result.push(str);
+  for (const payment of payments) {
+    console.log(`Checking payment of ${payment.id}`);
+
+    const [dd, mm] = payment.dateFrom.split('.').map(Number);
+    const yyyy = new Date().getFullYear(); // Assume current year
+    let date = new Date(yyyy, mm - 1, dd);
+
+    const localCanceled = {};
+
+    payment.groups.forEach(groupId => {
+      localCanceled[groupId] = canceled[groupId] || [];
+    });
+
+    while (allPairs.length < count) {
+      for (const groupId of payment.groups) {
+        const group = groups.find(g => g.id === groupId);
+        if (!group || date.getDay() !== group.dayOfWeek) continue;
+
+        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(
+          date.getMonth() + 1
+        ).padStart(2, '0')}`;
+
+        if (!localCanceled[groupId].includes(dateStr)) {
+          allPairs.push({ date: dateStr, groupId, payment });
+          console.log(` - ${dateStr} for ${groupId}`);
+          if (allPairs.length >= count) break;
+        }
+      }
+      date.setDate(date.getDate() + 1);
     }
-    date.setDate(date.getDate() + 1);
   }
 
-  return result;
+  return allPairs;
 }
 
 function GroupClassDetailPage() {
   const { groupId, date } = useParams(); // e.g. groupId and "02.06"
+  const navigate = useNavigate();
   const { db, groups, payments, students } = useData();
+
   const [group, setGroup] = useState(null);
-  const [canceled, setCanceled] = useState([]);
+  const [canceled, setCanceled] = useState({});
   const [signedUp, setSignedUp] = useState([]);
   const [total, setTotal] = useState(0);
 
@@ -43,41 +60,44 @@ function GroupClassDetailPage() {
   useEffect(() => {
     if (!groupId) return;
     const fetchCanceled = async () => {
-      const q = query(collection(db, `groups/${groupId}/canceledClasses`));
-      const snap = await getDocs(q);
-      const canceledList = snap.docs.map(d => d.data().date);
-      setCanceled(canceledList);
+      const map = {};
+      for (const group of groups) {
+        const q = query(collection(db, `groups/${group.id}/canceledClasses`));
+        const snap = await getDocs(q);
+        map[group.id] = snap.docs.map(d => d.data().date);
+      }
+      setCanceled(map);
     };
     fetchCanceled();
-  }, [groupId, db]);
+  }, [db, groups, groupId]);
 
   useEffect(() => {
-    if (!group || canceled.length === 0) return;
+    if (!group || Object.keys(canceled).length === 0) return;
 
     const matched = [];
 
     for (const payment of payments) {
       if (!payment.groups.includes(groupId)) continue;
 
-      const classes = generateClassDates(
-        payment.dateFrom,
-        group.dayOfWeek,
-        payment.type,
-        canceled
-      );
+      const schedule = generateCombinedSchedule([payment], groups, canceled, payment.type);
 
-      if (classes.includes(date)) {
-        const student = students.find(s => s.id === payment.studentId);
-        const perClass = payment.amount / payment.type;
-        matched.push({ name: student?.name, amount: perClass.toFixed(2) });
+      for (const { date: d, groupId: gId } of schedule) {
+        if (d === date && gId === groupId) {
+          const student = students.find(s => s.id === payment.studentId);
+          const perClass = payment.amount / payment.type;
+          matched.push({
+            id: student?.id,
+            name: student?.name,
+            amount: perClass.toFixed(2),
+          });
+        }
       }
     }
 
     setSignedUp(matched);
-
-    const earned = matched.reduce((sum, s) => sum + parseFloat(s.amount), 0) - 15;
+    const earned = matched.reduce((sum, s) => sum + parseFloat(s.amount), 0);
     setTotal(earned.toFixed(2));
-  }, [group, canceled, payments, students, date]);
+  }, [group, canceled, payments, students, date, groupId]);
 
   if (!group) return <div>Loading...</div>;
 
@@ -97,10 +117,14 @@ function GroupClassDetailPage() {
 
       <ul className="student-list">
         {signedUp.map((s, i) => (
-          <li key={i} className="class-item">
-            <span>1 {s.name?.slice(0, 18)}...</span>
+          <li
+            key={i}
+            className="class-item"
+            onClick={() => navigate(`/student/${s.id}`)}
+          >
+            <span>{i + 1} {s.name?.slice(0, 18)}...</span>
             <span>{s.amount}€</span>
-            <span>{'>'}</span>
+            <span>➔</span>
           </li>
         ))}
       </ul>

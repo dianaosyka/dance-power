@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import './AddPaymentPage.css';
 
 function getTodayDate() {
   const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`; // for type="date"
+}
+
+function formatDate(dateStr) {
+  const date = new Date(dateStr);
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
   return `${dd}.${mm}.${yyyy}`;
 }
 
 function AddPaymentPage() {
   const { students, groups, db } = useData();
+  const navigate = useNavigate();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -46,11 +56,23 @@ function AddPaymentPage() {
         type,
         discount: parseFloat(discount),
         groups: selectedGroups,
-        dateFrom: startDate,
-        createdAt: paidDate,
+        dateFrom: formatDate(startDate),
+        createdAt: formatDate(paidDate),
         timestamp: Timestamp.now(),
       });
-      alert('✅ Payment saved!');
+
+      // ✅ Clear form
+      setSearchTerm('');
+      setSelectedStudent(null);
+      setAmount('');
+      setType(12);
+      setDiscount('0');
+      setStartDate(getTodayDate());
+      setPaidDate(getTodayDate());
+      setSelectedGroups([]);
+
+      // ✅ Go back
+      navigate('/');
     } catch (err) {
       console.error(err);
       alert('❌ Error saving payment');
@@ -94,6 +116,7 @@ function AddPaymentPage() {
       <div className="form-row">
         <label>DATE FROM:</label>
         <input
+          type="date"
           className="input"
           value={startDate}
           onChange={e => setStartDate(e.target.value)}
@@ -143,6 +166,7 @@ function AddPaymentPage() {
       <div className="form-row">
         <label>DATE:</label>
         <input
+          type="date"
           className="input"
           value={paidDate}
           onChange={e => setPaidDate(e.target.value)}
