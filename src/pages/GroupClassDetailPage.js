@@ -11,11 +11,10 @@ function generateCombinedSchedule(payments, groups, canceled, count) {
     console.log(`Checking payment of ${payment.id}`);
 
     const [dd, mm] = payment.dateFrom.split('.').map(Number);
-    const yyyy = new Date().getFullYear(); // Assume current year
+    const yyyy = new Date().getFullYear();
     let date = new Date(yyyy, mm - 1, dd);
 
     const localCanceled = {};
-
     payment.groups.forEach(groupId => {
       localCanceled[groupId] = canceled[groupId] || [];
     });
@@ -25,13 +24,12 @@ function generateCombinedSchedule(payments, groups, canceled, count) {
         const group = groups.find(g => g.id === groupId);
         if (!group || date.getDay() !== group.dayOfWeek) continue;
 
-        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(
-          date.getMonth() + 1
-        ).padStart(2, '0')}`;
+        const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
+        if (date < openingDate) continue;
 
+        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
         if (!localCanceled[groupId].includes(dateStr)) {
           allPairs.push({ date: dateStr, groupId, payment });
-          console.log(` - ${dateStr} for ${groupId}`);
           if (allPairs.length >= count) break;
         }
       }
@@ -41,6 +39,7 @@ function generateCombinedSchedule(payments, groups, canceled, count) {
 
   return allPairs;
 }
+
 
 function GroupClassDetailPage() {
   const { groupId, date } = useParams(); // e.g. groupId and "02.06"
@@ -96,7 +95,7 @@ function GroupClassDetailPage() {
 
     setSignedUp(matched);
     const earned = matched.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-    setTotal(earned.toFixed(2));
+    setTotal((earned - 15).toFixed(2));
   }, [group, canceled, payments, students, date, groupId]);
 
   if (!group) return <div>Loading...</div>;
@@ -122,7 +121,7 @@ function GroupClassDetailPage() {
             className="class-item"
             onClick={() => navigate(`/student/${s.id}`)}
           >
-            <span>{i + 1} {s.name?.slice(0, 18)}...</span>
+            <span>{i + 1} {s.name?.slice(0, 30)}</span>
             <span>{s.amount}€</span>
             <span>➔</span>
           </li>

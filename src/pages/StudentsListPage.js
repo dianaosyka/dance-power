@@ -40,10 +40,13 @@ function StudentsListPage() {
           </button>
         </div>
 
+        <br />
+
         <div className="students-header">
           <span>PERSON</span>
           <span>CHOOSE</span>
         </div>
+
 
         <ul className="students-list">
           {filteredStudents.map(student => (
@@ -52,7 +55,7 @@ function StudentsListPage() {
               className="student-item"
               onClick={() => navigate(`/student/${student.id}`)}
             >
-              <span>{student.name.toUpperCase().slice(0, 20)}...</span>
+              <span>{student.name.toUpperCase().slice(0, 30)}</span>
               <span className="arrow">{'>'}</span>
             </li>
           ))}

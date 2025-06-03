@@ -71,3 +71,15 @@ body {
   border-radius: 12px;
   cursor: pointer;
 }
+button {
+  width: auto;
+  padding: 20px;
+  height: auto;
+  background-color: #d9006c;
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  align-items: center;
+}

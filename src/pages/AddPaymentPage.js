@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, Timestamp, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import './AddPaymentPage.css';
 
@@ -27,7 +27,7 @@ function AddPaymentPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [amount, setAmount] = useState('');
-  const [type, setType] = useState(12);
+  const [type, setType] = useState('');
   const [discount, setDiscount] = useState('0');
   const [startDate, setStartDate] = useState(getTodayDate());
   const [paidDate, setPaidDate] = useState(getTodayDate());
@@ -53,7 +53,7 @@ function AddPaymentPage() {
       await addDoc(collection(db, 'payments'), {
         studentId: selectedStudent.id,
         amount: parseFloat(amount),
-        type,
+        type: parseInt(type),
         discount: parseFloat(discount),
         groups: selectedGroups,
         dateFrom: formatDate(startDate),
@@ -61,17 +61,19 @@ function AddPaymentPage() {
         timestamp: Timestamp.now(),
       });
 
-      // ✅ Clear form
+      await updateDoc(doc(db, 'students', selectedStudent.id), {
+        groups: arrayUnion(...selectedGroups),
+      });
+
       setSearchTerm('');
       setSelectedStudent(null);
       setAmount('');
-      setType(12);
+      setType('');
       setDiscount('0');
       setStartDate(getTodayDate());
       setPaidDate(getTodayDate());
       setSelectedGroups([]);
 
-      // ✅ Go back
       navigate('/');
     } catch (err) {
       console.error(err);
@@ -113,6 +115,17 @@ function AddPaymentPage() {
         <input className="input" value={amount} onChange={e => setAmount(e.target.value)} />
       </div>
 
+      
+      <div className="form-row">
+        <label>PAYMENT DATE:</label>
+        <input
+          type="date"
+          className="input"
+          value={paidDate}
+          onChange={e => setPaidDate(e.target.value)}
+        />
+      </div>
+
       <div className="form-row">
         <label>DATE FROM:</label>
         <input
@@ -128,8 +141,9 @@ function AddPaymentPage() {
         <select
           className="input"
           value={type}
-          onChange={e => setType(parseInt(e.target.value))}
+          onChange={e => setType(e.target.value)}
         >
+          <option value="">Select...</option>
           {[1, 2, 4, 8, 12, 24].map((num) => (
             <option key={num} value={num}>
               {num} CLASSES
@@ -160,16 +174,6 @@ function AddPaymentPage() {
           className="input"
           value={discount}
           onChange={e => setDiscount(e.target.value)}
-        />
-      </div>
-
-      <div className="form-row">
-        <label>DATE:</label>
-        <input
-          type="date"
-          className="input"
-          value={paidDate}
-          onChange={e => setPaidDate(e.target.value)}
         />
       </div>
 
