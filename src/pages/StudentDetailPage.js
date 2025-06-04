@@ -144,7 +144,8 @@ function StudentDetailPage() {
           return <div key={gid}>{g?.name}</div>;
         })}
       </div>
-      <h3>CLASSES AMOUNT: {currentPayment.type}</h3>
+      <h3 className="amount">CLASSES AMOUNT: {currentPayment.type}</h3>
+      <h5 className="warning">*the class dates may differ due to rescheduling.</h5>
       <table>
         <thead>
           <tr>

@@ -17,6 +17,15 @@
   margin: 16px 0;
 }
 
+.warning {
+  font-size: 16px;
+  font-weight: 100;
+}
+
+.amount{
+  margin-bottom: -30px;
+}
+
 .group-list {
   margin: 12px 0;
 }
@@ -39,12 +48,13 @@ table td {
   text-align: center;
   margin-top: 20px;
 }
+.delete-button>button{
+    font-size: 36px;
+    color:#4b0082;
+}
 
 .swipe-controls {
   display: flex;
   justify-content: space-between;
   margin-top: 10px;
-}
-.delete-button{
-    font-size: 35px;
 }

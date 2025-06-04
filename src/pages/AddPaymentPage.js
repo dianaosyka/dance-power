@@ -52,7 +52,7 @@ function AddPaymentPage() {
     try {
       await addDoc(collection(db, 'payments'), {
         studentId: selectedStudent.id,
-        amount: parseFloat(amount),
+        amount: parseFloat(amount.replace(',', '.')),
         type: parseInt(type),
         discount: parseFloat(discount),
         groups: selectedGroups,
