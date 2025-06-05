@@ -4,6 +4,7 @@ import {
   collection,
   onSnapshot,
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 
 const firebaseConfig = {
@@ -21,6 +22,8 @@ export const db = getFirestore(app);
 
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
+
+export const auth = getAuth(app);
 
 export function DataProvider({ children }) {
   const [groups, setGroups] = useState([]);

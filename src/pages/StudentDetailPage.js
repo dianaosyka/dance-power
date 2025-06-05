@@ -6,8 +6,10 @@ import {
   query,
   deleteDoc,
   doc,
+  getDoc
 } from 'firebase/firestore';
 import { useData } from '../context/DataContext';
+import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 
 function getCombinedClassDates({ groups, payment, canceledMap }) {
@@ -40,10 +42,11 @@ function getCombinedClassDates({ groups, payment, canceledMap }) {
 function StudentDetailPage() {
   const { studentId } = useParams();
   const { db, students, payments, groups } = useData();
+  const { user } = useUser();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [canceledMap, setCanceledMap] = useState({});
-  const [attendance, setAttendance] = useState([]);
+  const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
 
   const student = students.find(s => s.id === studentId);
@@ -70,14 +73,15 @@ function StudentDetailPage() {
   }, [currentPayment, db]);
 
   useEffect(() => {
-    const fetchAttendance = async () => {
-      const q = query(collection(db, `attendance/${studentId}/records`));
-      const snap = await getDocs(q);
-      setAttendance(snap.docs.map(doc => doc.data()));
+    const fetchAbsences = async () => {
+      const ref = doc(db, 'students', studentId);
+      const snap = await getDoc(ref);
+      const data = snap.exists() ? snap.data().absences || {} : {};
+      setAbsences(data);
     };
 
     if (studentId) {
-      fetchAttendance();
+      fetchAbsences();
     }
   }, [studentId]);
 
@@ -112,11 +116,8 @@ function StudentDetailPage() {
 
     if (classDate > today) return '🕒';
 
-    const notAttended = attendance.some(
-      a => a.date === date && a.groupId === groupId
-    );
-
-    return notAttended ? '❌' : '✅';
+    const absentGroups = absences?.[date] || [];
+    return absentGroups.includes(groupId) ? '❌' : '✅';
   };
 
   const handleDelete = async () => {
@@ -167,9 +168,11 @@ function StudentDetailPage() {
         </tbody>
       </table>
 
-      <div className="delete-button">
-        <button onClick={handleDelete}>🗑</button>
-      </div>
+      {user?.role === 'admin' && (
+        <div className="delete-button">
+          <button onClick={handleDelete}>🗑</button>
+        </div>
+      )}
 
       <div className="swipe-controls">
         {currentIndex < studentPayments.length - 1 && (

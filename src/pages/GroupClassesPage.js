@@ -10,6 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { useData } from '../context/DataContext';
+import { useUser } from '../context/UserContext';
 import './GroupClassesPage.css';
 
 function getPastDatesFrom(openingDateStr, weekday) {
@@ -49,6 +50,7 @@ function GroupClassesPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { groups, db } = useData();
+  const { user } = useUser();
 
   const [group, setGroup] = useState(null);
   const [pastDates, setPastDates] = useState([]);
@@ -120,9 +122,12 @@ function GroupClassesPage() {
       <h2 className="group-title">{group?.name.toUpperCase()}</h2>
       <p className="group-schedule">{group?.schedule || 'FRIDAY 20:00'}</p>
 
-      <button className="students-button" onClick={() => navigate('/students')}>
-  STUDENTS LIST
-</button>
+      {user?.role === 'admin' && (
+        <button className="students-button" onClick={() => navigate('/students')}>
+          STUDENTS LIST
+        </button>
+      )}
+
       <button className="add-cancel-button" onClick={toggleFutureDates}>
         {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
       </button>
