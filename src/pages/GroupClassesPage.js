@@ -16,7 +16,8 @@ import './GroupClassesPage.css';
 function getPastDatesFrom(openingDateStr, weekday) {
   const result = [];
   const today = new Date();
-  let date = new Date(openingDateStr.split('.').reverse().join('.'));
+  const [dd, mm, yyyy] = openingDateStr.split('.');
+  let date = new Date(`${yyyy}-${mm}-${dd}`);
 
   while (date <= today) {
     if (date.getDay() === weekday) {
