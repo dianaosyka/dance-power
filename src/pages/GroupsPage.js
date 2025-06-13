@@ -15,8 +15,8 @@ function GroupsPage() {
   };
 
   const visibleGroups = user?.role === 'coach'
-  ? groups.filter(group => user.groups?.includes(group.id))
-  : groups;
+    ? groups.filter(group => user.groups?.includes(group.id))
+    : groups;
 
   return (
     <div className="page">
@@ -28,12 +28,22 @@ function GroupsPage() {
           </button>
         </div>
 
-        {user?.role === 'admin' && (<button
-          className="students-button"
-          onClick={() => navigate('/students')}
-        >
-          STUDENTS LIST
-        </button>)}
+        {user?.role === 'admin' && (
+          <>
+            <button
+              className="students-button"
+              onClick={() => navigate('/students')}
+            >
+              STUDENTS LIST
+            </button>
+            <button
+              className="students-button"
+              onClick={() => navigate('/payment-history')}
+            >
+              PAYMENT HISTORY
+            </button>
+          </>
+        )}
 
         <ul className="group-list">
           {visibleGroups.map(group => (

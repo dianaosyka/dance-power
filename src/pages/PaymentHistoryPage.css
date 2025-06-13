@@ -1,0 +1,48 @@
+.payment-history-page {
+  padding: 20px;
+  background: #d9006c;
+  font-family: sans-serif;
+  min-height: 100vh;
+  padding: 20px;
+  max-width: 400px;
+  margin: auto;
+}
+
+.history-title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #ffe7fd;
+}
+
+.transaction-list {
+  list-style: none;
+  padding: 0;
+}
+
+.transaction-card {
+  background-color: #ffe7fd;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.top-line {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.amount {
+  color: #4caf50;
+}
+
+.date {
+  color: #888;
+}
+
+.info {
+  font-size: 14px;
+  color: #222222;
+}
