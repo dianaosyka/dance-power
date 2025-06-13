@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { addDoc, collection, Timestamp, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  Timestamp,
+  updateDoc,
+  doc,
+  arrayUnion
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import './AddPaymentPage.css';
 
@@ -9,7 +16,7 @@ function getTodayDate() {
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`; // for type="date"
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function formatDate(dateStr) {
@@ -44,7 +51,14 @@ function AddPaymentPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedStudent || !amount || !type || !startDate || !paidDate || selectedGroups.length === 0) {
+    if (
+      !selectedStudent ||
+      !amount ||
+      !type ||
+      !startDate ||
+      !paidDate ||
+      selectedGroups.length === 0
+    ) {
       alert('Please fill in all fields');
       return;
     }
@@ -74,7 +88,8 @@ function AddPaymentPage() {
       setPaidDate(getTodayDate());
       setSelectedGroups([]);
 
-      navigate('/');
+      // ✅ Redirect to the student's detail page
+      navigate(`/student/${selectedStudent.id}`);
     } catch (err) {
       console.error(err);
       alert('❌ Error saving payment');
@@ -99,10 +114,13 @@ function AddPaymentPage() {
         {searchTerm && !selectedStudent && (
           <ul className="dropdown">
             {filteredStudents.map(s => (
-              <li key={s.id} onClick={() => {
-                setSelectedStudent(s);
-                setSearchTerm(s.name);
-              }}>
+              <li
+                key={s.id}
+                onClick={() => {
+                  setSelectedStudent(s);
+                  setSearchTerm(s.name);
+                }}
+              >
                 {s.name}
               </li>
             ))}
@@ -112,10 +130,13 @@ function AddPaymentPage() {
 
       <div className="form-row">
         <label>AMOUNT (€):</label>
-        <input className="input" value={amount} onChange={e => setAmount(e.target.value)} />
+        <input
+          className="input"
+          value={amount}
+          onChange={e => setAmount(e.target.value)}
+        />
       </div>
 
-      
       <div className="form-row">
         <label>PAYMENT DATE:</label>
         <input

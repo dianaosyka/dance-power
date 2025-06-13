@@ -22,7 +22,7 @@ function PaymentHistoryPage() {
         {sortedPayments.map((p, i) => (
           <li key={i} className="transaction-card">
             <div className="top-line">
-              <span className="amount">+{p.amount}€</span>
+              <span className="amountSum">+{p.amount}€</span>
               <span className="date">{p.createdAt}</span>
             </div>
             <div className="info">
