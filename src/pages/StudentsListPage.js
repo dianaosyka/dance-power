@@ -9,12 +9,15 @@ function StudentsListPage() {
   const { students, groups } = useData();
   const { user } = useUser();
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
 
-  const filteredStudents = selectedGroup
-    ? students.filter(s => s.groups.includes(selectedGroup))
-    : students;
+  const filteredStudents = students.filter(student => {
+    const matchesGroup = selectedGroup ? student.groups.includes(selectedGroup) : true;
+    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesGroup && matchesSearch;
+  });
 
   return (
     <div className="students-page">
@@ -33,6 +36,15 @@ function StudentsListPage() {
             </option>
           ))}
         </select>
+
+        <input
+          type="text"
+          placeholder="Search student..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="input"
+          style={{ width: '95%' }}
+        />
 
         <div className="people-header">
           <h3 className="people-title">PEOPLE</h3>
@@ -55,10 +67,7 @@ function StudentsListPage() {
               className="student-item"
               onClick={() => navigate(`/student/${student.id}`)}
             >
-              <span>
-                {student.name.toUpperCase().slice(0, 30)}
-                {user?.role === 'admin' && <span className="student-id"> — {student.id}</span>}
-              </span>
+              <span>{student.name.toUpperCase().slice(0, 30)}</span>
               <span className="arrow">{'>'}</span>
             </li>
           ))}
