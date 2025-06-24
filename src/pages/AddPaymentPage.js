@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import {
   addDoc,
@@ -8,7 +8,7 @@ import {
   doc,
   arrayUnion
 } from 'firebase/firestore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './AddPaymentPage.css';
 
 function getTodayDate() {
@@ -30,6 +30,7 @@ function formatDate(dateStr) {
 function AddPaymentPage() {
   const { students, groups, db } = useData();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -49,6 +50,19 @@ function AddPaymentPage() {
       prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]
     );
   };
+
+  // Prefill student from ?studentName=...
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nameFromURL = params.get('studentName');
+    if (nameFromURL) {
+      setSearchTerm(nameFromURL);
+      const match = students.find(s => s.name === nameFromURL);
+      if (match) {
+        setSelectedStudent(match);
+      }
+    }
+  }, [students, location.search]);
 
   const handleSubmit = async () => {
     if (
@@ -79,6 +93,7 @@ function AddPaymentPage() {
         groups: arrayUnion(...selectedGroups),
       });
 
+      // Reset form
       setSearchTerm('');
       setSelectedStudent(null);
       setAmount('');
@@ -88,7 +103,7 @@ function AddPaymentPage() {
       setPaidDate(getTodayDate());
       setSelectedGroups([]);
 
-      // ✅ Redirect to the student's detail page
+      // Go back to student detail
       navigate(`/student/${selectedStudent.id}`);
     } catch (err) {
       console.error(err);

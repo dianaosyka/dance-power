@@ -17,10 +17,12 @@ async function hashPassword(password) {
 function LoginPage() {
   const { setUser } = useUser();
   const { db } = useData();
+  const navigate = useNavigate();
+
+  const [mode, setMode] = useState(null); // null | 'admin' | 'student'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [studentId, setStudentId] = useState('');
-  const navigate = useNavigate();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -46,7 +48,7 @@ function LoginPage() {
       setUser({
         email: userData.email,
         role: userData.role,
-        groups: userData.groups || [], // ✅ include coach group IDs if any
+        groups: userData.groups || [],
       });
 
       navigate('/');
@@ -71,7 +73,7 @@ function LoginPage() {
         return;
       }
 
-      setUser({ role: studentId }); // student ID used as role
+      setUser({ role: studentId });
       navigate('/');
     } catch (err) {
       console.error(err);
@@ -83,28 +85,60 @@ function LoginPage() {
     <div className="login-page">
       <h2 className="login-title">Login</h2>
 
-      <div className="form-row">
-        <label>Email:</label>
-        <input className="input" value={email} onChange={e => setEmail(e.target.value)} />
-      </div>
+      {!mode && (
+        <div className="button-group">
+          <button onClick={() => setMode('admin')}>
+            👩‍🏫 I'm a Teacher
+          </button>
+          <button onClick={() => setMode('student')}>🎓 I'm a Student</button>
+        </div>
+      )}
 
-      <div className="form-row">
-        <label>Password:</label>
-        <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-      </div>
+      {mode === 'admin' && (
+        <>
+          <div className="form-row">
+            <label>Email:</label>
+            <input className="input" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
 
-      <button className="confirm-button" onClick={handleLogin}>
-        Login
-      </button>
+          <div className="form-row">
+            <label>Password:</label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </div>
 
-      <hr style={{ marginTop: '20px', marginBottom: '20px' }} />
+          <button className="confirm-button" onClick={handleLogin}>
+            Login
+          </button>
 
-      <div className="form-row">
-        <label>Student ID:</label>
-        <input className="input" value={studentId} onChange={e => setStudentId(e.target.value)} />
-      </div>
+          <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            <button onClick={() => setMode(null)}>⬅ Back</button>
+          </div>
+        </>
+      )}
 
-      <button onClick={handleStudentLogin}>🎓 I'm a Student</button>
+      {mode === 'student' && (
+        <>
+          <div className="form-row">
+            <label>Student ID:</label>
+            <input
+              className="input"
+              value={studentId}
+              onChange={e => setStudentId(e.target.value)}
+            />
+          </div>
+
+          <button onClick={handleStudentLogin}>🔍 Search</button>
+
+          <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            <button onClick={() => setMode(null)}>⬅ Back</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
