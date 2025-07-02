@@ -146,13 +146,13 @@ function GroupClassesPage() {
               <li
                 key={date}
                 className="class-item"
+              >
+                <span>{date}</span>
+                <span 
                 onClick={() => {
                   setSelectedDate(date);
                   setShowModal(true);
-                }}
-              >
-                <span>{date}</span>
-                <span className="check">{isCanceled(date) ? '❌' : '✅'}</span>
+                }}className="check">{isCanceled(date) ? '❌' : '✅'}</span>
                 <span
                   className="arrow"
                   onClick={(e) => {
@@ -178,13 +178,14 @@ function GroupClassesPage() {
           <li
             key={date}
             className="class-item"
+          >
+            <span>{date}</span>
+            <span 
             onClick={() => {
               setSelectedDate(date);
               setShowModal(true);
             }}
-          >
-            <span>{date}</span>
-            <span className="check">{isCanceled(date) ? '❌' : '✅'}</span>
+            className="check">{isCanceled(date) ? '❌' : '✅'}</span>
             <span
               className="arrow"
               onClick={(e) => {
