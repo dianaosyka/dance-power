@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { collection, addDoc } from 'firebase/firestore';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import './AddStudentModal.css';
 
 function AddStudentModal({ groupId, onClose }) {

@@ -9,7 +9,7 @@ import {
   setDoc,
   deleteField
 } from 'firebase/firestore';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './GroupClassDetailPage.css';
 
@@ -17,9 +17,9 @@ function generateCombinedSchedule(payments, groups, canceled, count) {
   const allPairs = [];
 
   for (const payment of payments) {
-    const [dd, mm] = payment.dateFrom.split('.').map(Number);
-    const yyyy = new Date().getFullYear();
+    const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
     let date = new Date(yyyy, mm - 1, dd);
+
 
     const localCanceled = {};
     payment.groups.forEach(groupId => {
@@ -34,7 +34,7 @@ function generateCombinedSchedule(payments, groups, canceled, count) {
         const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
         if (date < openingDate) continue;
 
-        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
         if (!localCanceled[groupId].includes(dateStr)) {
           allPairs.push({ date: dateStr, groupId, payment });
           if (allPairs.length >= count) break;
@@ -194,8 +194,8 @@ function GroupClassDetailPage() {
       <ul className="student-list">
         {signedUp.map((s, i) => {
           const today = new Date();
-          const [dd, mm] = date.split('.');
-          const classDate = new Date(today.getFullYear(), Number(mm) - 1, Number(dd));
+          const [dd, mm, yyyy] = date.split('.').map(Number);
+          const classDate = new Date(yyyy, mm - 1, dd);
           const isFuture = classDate > today;
           const icon = isFuture ? '🕒' : s.absent ? '❌' : '✅';
           const displayIcon = loadingAbsences ? '🔄' : (loadingId === s.id ? '🔄' : icon);

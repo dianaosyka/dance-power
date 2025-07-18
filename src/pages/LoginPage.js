@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { getDoc, doc, collection, getDocs } from 'firebase/firestore';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import './LoginPage.css';
 
 async function hashPassword(password) {

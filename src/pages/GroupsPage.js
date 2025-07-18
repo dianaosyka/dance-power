@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './GroupsPage.css';
 

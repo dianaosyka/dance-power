@@ -1,5 +1,5 @@
 import React from 'react';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import './PaymentHistoryPage.css';
 
 function PaymentHistoryPage() {
@@ -11,9 +11,17 @@ function PaymentHistoryPage() {
   const getGroupNames = (ids) =>
     ids.map(id => groups.find(g => g.id === id)?.name || id).join(', ');
 
-  const sortedPayments = [...payments].sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
+  const sortedPayments = [...payments].sort((a, b) => {
+    const ta = a.timestamp?.seconds || 0;
+    const tb = b.timestamp?.seconds || 0;
+    return tb - ta; // newest first
+  });
+
+  const formatTimestamp = (ts) => {
+    if (!ts || !ts.seconds) return '—';
+    const date = new Date(ts.seconds * 1000);
+    return date.toLocaleString();
+  };
 
   return (
     <div className="payment-history-page">
@@ -31,6 +39,7 @@ function PaymentHistoryPage() {
               <div><b>Groups:</b> {getGroupNames(p.groups)}</div>
               <div><b>Date from:</b> {p.dateFrom}</div>
               <div><b>Discount:</b> {p.discount}%</div>
+              <div><b>Timestamp:</b> {formatTimestamp(p.timestamp)}</div>
             </div>
           </li>
         ))}
@@ -39,4 +48,4 @@ function PaymentHistoryPage() {
   );
 }
 
-export default PaymentHistoryPage;  
+export default PaymentHistoryPage;

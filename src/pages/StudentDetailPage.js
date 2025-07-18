@@ -8,13 +8,12 @@ import {
   doc,
   getDoc
 } from 'firebase/firestore';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 
 function getCombinedClassDates({ groups, payment, canceledMap }) {
-  const [dd, mm] = payment.dateFrom.split('.').map(Number);
-  const yyyy = new Date().getFullYear();
+  const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
   let date = new Date(yyyy, mm - 1, dd);
 
   const results = [];
@@ -27,7 +26,7 @@ function getCombinedClassDates({ groups, payment, canceledMap }) {
       const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
       if (date < openingDate) continue;
 
-      const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
       if (!canceledMap[groupId]?.includes(dateStr)) {
         results.push({ date: dateStr, groupId, groupName: group.name });
         if (results.length >= payment.type) break;
@@ -108,8 +107,8 @@ function StudentDetailPage() {
 
   const getAttendanceIcon = (groupId, date) => {
     const today = new Date();
-    const [dd, mm] = date.split('.').map(Number);
-    const classDate = new Date(today.getFullYear(), mm - 1, dd);
+    const [dd, mm, yyyy] = date.split('.').map(Number);
+    const classDate = new Date(yyyy, mm - 1, dd);
     if (classDate > today) return '🕒';
     const absentGroups = absences?.[date] || [];
     return absentGroups.includes(groupId) ? '❌' : '✅';

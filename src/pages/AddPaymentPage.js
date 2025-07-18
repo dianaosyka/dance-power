@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import {
   addDoc,
   collection,

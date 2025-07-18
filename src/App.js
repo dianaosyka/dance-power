@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
-import { DataProvider } from './context/DataContext';
+import { DataProvider } from './context/firebase';
 import { useUser, UserProvider } from './context/UserContext';
 
 import GroupsPage from './pages/GroupsPage';

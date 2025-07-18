@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { collection, setDoc, doc } from 'firebase/firestore';
-import { db } from './context/DataContext';
+import { db } from './context/firebase';
 
 const usersToCreate = [
   { email: 'diana.osyka@outlook.com', role: 'coach' },

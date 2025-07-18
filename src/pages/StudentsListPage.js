@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import './StudentsListPage.css';
 import AddStudentModal from '../components/AddStudentModal';
 import { useNavigate } from 'react-router-dom';

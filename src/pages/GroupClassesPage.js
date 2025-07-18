@@ -9,7 +9,7 @@ import {
   getDocs,
   Timestamp,
 } from 'firebase/firestore';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './GroupClassesPage.css';
 
@@ -23,7 +23,8 @@ function getPastDatesFrom(openingDateStr, weekday) {
     if (date.getDay() === weekday) {
       const dd = String(date.getDate()).padStart(2, '0');
       const mm = String(date.getMonth() + 1).padStart(2, '0');
-      result.unshift(`${dd}.${mm}`);
+      const yyyyStr = date.getFullYear();
+      result.unshift(`${dd}.${mm}.${yyyyStr}`);
     }
     date.setDate(date.getDate() + 1);
   }
@@ -39,7 +40,8 @@ function getNextFutureDates(startFrom, weekday, count) {
     if (date.getDay() === weekday) {
       const dd = String(date.getDate()).padStart(2, '0');
       const mm = String(date.getMonth() + 1).padStart(2, '0');
-      result.push(`${dd}.${mm}`);
+      const yyyyStr = date.getFullYear();
+      result.push(`${dd}.${mm}.${yyyyStr}`);
     }
     date.setDate(date.getDate() + 1);
   }
