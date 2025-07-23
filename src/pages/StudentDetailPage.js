@@ -12,30 +12,60 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 
-function getCombinedClassDates({ groups, payment, canceledMap }) {
+function getValidClasses(payment, groups, canceledMap) {
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
-  let date = new Date(yyyy, mm - 1, dd);
-
+  const startDate = new Date(yyyy, mm - 1, dd);
   const results = [];
 
-  while (results.length < payment.type) {
-    for (const groupId of payment.groups) {
-      const group = groups.find(g => g.id === groupId);
-      if (!group || date.getDay() !== group.dayOfWeek) continue;
+  let counter = 0;
+  const maxClasses = payment.type;
 
-      const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
-      if (date < openingDate) continue;
+  // Build per-group date queues
+  const dateMap = {};
 
-      const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
-      if (!canceledMap[groupId]?.includes(dateStr)) {
-        results.push({ date: dateStr, groupId, groupName: group.name });
-        if (results.length >= payment.type) break;
+  for (const groupId of payment.groups) {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) continue;
+
+    const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
+    const classDates = [];
+
+    let current = new Date(startDate);
+    while (classDates.length < maxClasses * 2) {
+      if (current.getDay() === group.dayOfWeek && current >= openingDate) {
+        const d = String(current.getDate()).padStart(2, '0');
+        const m = String(current.getMonth() + 1).padStart(2, '0');
+        const y = current.getFullYear();
+        const fullDate = `${d}.${m}.${y}`;
+        if (!canceledMap[groupId]?.includes(fullDate)) {
+          classDates.push({
+            date: fullDate,
+            groupId,
+            groupName: group.name,
+          });
+        }
       }
+      current.setDate(current.getDate() + 1);
     }
-    date.setDate(date.getDate() + 1);
+
+    dateMap[groupId] = classDates;
   }
 
-  return results;
+  // Merge class lists round-robin until maxClasses reached
+  while (results.length < maxClasses) {
+    for (const groupId of payment.groups) {
+      const next = dateMap[groupId]?.shift();
+      if (next) results.push(next);
+      if (results.length >= maxClasses) break;
+    }
+  }
+
+  return results.sort((b, a) => {
+  const [da, ma, ya] = a.date.split('.');
+  const [db, mb, yb] = b.date.split('.');
+  return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
+});
+
 }
 
 function StudentDetailPage() {
@@ -55,9 +85,7 @@ function StudentDetailPage() {
     .sort((a, b) => {
       const [da, ma, ya] = a.dateFrom.split('.');
       const [db, mb, yb] = b.dateFrom.split('.');
-      const dateA = new Date(`${ya}-${ma}-${da}`);
-      const dateB = new Date(`${yb}-${mb}-${db}`);
-      return dateB - dateA;
+      return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
     });
 
   const currentPayment = studentPayments[currentIndex];
@@ -86,24 +114,15 @@ function StudentDetailPage() {
       setAbsences(data);
     };
 
-    if (studentId) {
-      fetchAbsences();
-    }
+    if (studentId) fetchAbsences();
   }, [studentId]);
 
   useEffect(() => {
     if (!currentPayment) return;
 
-    const allDates = getCombinedClassDates({
-      groups,
-      payment: currentPayment,
-      canceledMap,
-    });
-
-    setClasses(allDates);
+    const validClasses = getValidClasses(currentPayment, groups, canceledMap);
+    setClasses(validClasses);
   }, [currentPayment, canceledMap, groups]);
-
-  if (!student) return <div>Loading...</div>;
 
   const getAttendanceIcon = (groupId, date) => {
     const today = new Date();
@@ -127,10 +146,8 @@ function StudentDetailPage() {
   };
 
   const handleDeleteStudent = async () => {
-    const first = window.confirm('Are you sure you want to delete this student?');
-    if (!first) return;
-
-    const second = prompt('⚠️ This action is permanent.\nType DELETE to confirm.');
+    if (!window.confirm('Are you sure you want to delete this student?')) return;
+    const second = prompt('⚠️ Type DELETE to confirm.');
     if (second !== 'DELETE') {
       alert('❌ Deletion canceled');
       return;
@@ -150,40 +167,7 @@ function StudentDetailPage() {
     navigate(`/add-payment?studentName=${encodeURIComponent(student.name)}`);
   };
 
-  if (studentPayments.length === 0) {
-    return (
-      <div>
-        <div className="student-card">
-          {(user?.role === 'admin' || user?.role === 'coach') && (<p>{student.id}</p>)}
-          <p>{student.phone}</p>
-          <h2>{student.name.toUpperCase()}</h2>
-          <h3>No memberships.</h3>
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <button onClick={handleAddPayment} style={{ padding: '8px 16px' }}>➕ Add Payment</button>
-        </div>
-
-        {user?.role === 'admin' && (
-          <div style={{ marginTop: '30px', textAlign: 'center' }}>
-            <button
-              onClick={handleDeleteStudent}
-              style={{
-                backgroundColor: 'red',
-                color: 'white',
-                padding: '8px 16px',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              🗑 DELETE STUDENT
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
+  if (!student) return <div>Loading...</div>;
 
   return (
     <div>
@@ -191,7 +175,7 @@ function StudentDetailPage() {
         {(user?.role === 'admin' || user?.role === 'coach') && (<p>{student.id}</p>)}
         <p>{student.phone}</p>
         <h2>{student.name.toUpperCase()}</h2>
-        {currentPayment.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
+        {currentPayment?.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
         <p>START DATE: {currentPayment.dateFrom}</p>
         <h1 className="price">{currentPayment.amount}€</h1>
 
@@ -242,20 +226,13 @@ function StudentDetailPage() {
           )}
         </div>
       </div>
-      {user?.role === 'admin' && (
-        <div>
-      <div style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button onClick={handleAddPayment} style={{ padding: '8px 16px' }}>➕ ADD PAYMENT</button>
-      </div>
 
-      <div style={{ marginTop: '10px', textAlign: 'center' }}>
-          <button
-            onClick={handleDeleteStudent}
-            style={{ background:'red'}}
-          >
-            DELETE STUDENT
-          </button>
-        </div>
+      {user?.role === 'admin' && (
+        <div style={{ textAlign: 'center', marginTop: '20px' }}>
+          <button onClick={handleAddPayment} style={{ padding: '8px 16px' }}>➕ ADD PAYMENT</button>
+          <div style={{ marginTop: '10px' }}>
+            <button onClick={handleDeleteStudent} style={{ background: 'red', color: 'white' }}>DELETE STUDENT</button>
+          </div>
         </div>
       )}
     </div>
