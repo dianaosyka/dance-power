@@ -3,6 +3,7 @@ import {
   getFirestore,
   collection,
   onSnapshot,
+  getDocs
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
@@ -19,6 +20,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+const usersRef = collection(db, 'users');
+const snapshot = await getDocs(usersRef);
+
+export const coaches = snapshot.docs
+  .map(doc => ({ id: doc.id, ...doc.data() }))
+  .filter(user => user.role === "coach" || user.role === "admin");
+  console.log('Coaches:', coaches);
 
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
@@ -54,7 +63,7 @@ export function DataProvider({ children }) {
   }, []);
 
   return (
-    <DataContext.Provider value={{ groups, students, payments, classes, db }}>
+    <DataContext.Provider value={{ groups, students, payments, classes, db, coaches }}>
       {children}
     </DataContext.Provider>
   );

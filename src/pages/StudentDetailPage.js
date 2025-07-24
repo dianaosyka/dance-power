@@ -6,21 +6,20 @@ import {
   query,
   deleteDoc,
   doc,
-  getDoc
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 
 function getValidClasses(payment, groups, canceledMap) {
+  if (!payment || !payment.dateFrom) return [];
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
   const startDate = new Date(yyyy, mm - 1, dd);
   const results = [];
 
-  let counter = 0;
   const maxClasses = payment.type;
-
-  // Build per-group date queues
   const dateMap = {};
 
   for (const groupId of payment.groups) {
@@ -51,7 +50,6 @@ function getValidClasses(payment, groups, canceledMap) {
     dateMap[groupId] = classDates;
   }
 
-  // Merge class lists round-robin until maxClasses reached
   while (results.length < maxClasses) {
     for (const groupId of payment.groups) {
       const next = dateMap[groupId]?.shift();
@@ -61,11 +59,10 @@ function getValidClasses(payment, groups, canceledMap) {
   }
 
   return results.sort((b, a) => {
-  const [da, ma, ya] = a.date.split('.');
-  const [db, mb, yb] = b.date.split('.');
-  return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
-});
-
+    const [da, ma, ya] = a.date.split('.');
+    const [db, mb, yb] = b.date.split('.');
+    return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
+  });
 }
 
 function StudentDetailPage() {
@@ -88,11 +85,10 @@ function StudentDetailPage() {
       return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
     });
 
-  const currentPayment = studentPayments[currentIndex];
+  const currentPayment = studentPayments.length > 0 ? studentPayments[currentIndex] : null;
 
   useEffect(() => {
     if (!currentPayment) return;
-
     const fetchCanceled = async () => {
       const map = {};
       for (const groupId of currentPayment.groups) {
@@ -102,7 +98,6 @@ function StudentDetailPage() {
       }
       setCanceledMap(map);
     };
-
     fetchCanceled();
   }, [currentPayment, db]);
 
@@ -113,13 +108,11 @@ function StudentDetailPage() {
       const data = snap.exists() ? snap.data().absences || {} : {};
       setAbsences(data);
     };
-
     if (studentId) fetchAbsences();
   }, [studentId]);
 
   useEffect(() => {
     if (!currentPayment) return;
-
     const validClasses = getValidClasses(currentPayment, groups, canceledMap);
     setClasses(validClasses);
   }, [currentPayment, canceledMap, groups]);
@@ -134,24 +127,27 @@ function StudentDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this payment?')) {
-      try {
-        await deleteDoc(doc(db, 'payments', currentPayment.id));
-        alert('✅ Payment deleted');
-      } catch (err) {
-        alert('❌ Error deleting payment');
-        console.error(err);
-      }
+    if (!window.confirm('Are you sure you want to delete this payment?')) return;
+    try {
+      const toDelete = studentPayments[currentIndex];
+      await deleteDoc(doc(db, 'payments', toDelete.id));
+
+      const newPayments = studentPayments.filter((_, i) => i !== currentIndex);
+      const latest = newPayments[0]?.id || '';
+      await updateDoc(doc(db, 'students', studentId), { lastPaymentId: latest });
+
+      alert('✅ Payment deleted');
+      setCurrentIndex(0);
+    } catch (err) {
+      alert('❌ Error deleting payment');
+      console.error(err);
     }
   };
 
   const handleDeleteStudent = async () => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     const second = prompt('⚠️ Type DELETE to confirm.');
-    if (second !== 'DELETE') {
-      alert('❌ Deletion canceled');
-      return;
-    }
+    if (second !== 'DELETE') return alert('❌ Deletion canceled');
 
     try {
       await deleteDoc(doc(db, 'students', studentId));
@@ -168,6 +164,17 @@ function StudentDetailPage() {
   };
 
   if (!student) return <div>Loading...</div>;
+
+  if (!currentPayment) {
+    return (
+      <div className="student-card">
+        <p>{student.phone}</p>
+        <h2>{student.name.toUpperCase()}</h2>
+        <h3>No payments.</h3>
+        <button onClick={handleAddPayment}>➕ ADD PAYMENT</button>
+      </div>
+    );
+  }
 
   return (
     <div>

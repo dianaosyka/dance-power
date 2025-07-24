@@ -78,21 +78,24 @@ function AddPaymentPage() {
     }
 
     try {
-      await addDoc(collection(db, 'payments'), {
-        studentId: selectedStudent.id,
-        amount: parseFloat(amount.replace(',', '.')),
-        type: parseInt(type),
-        discount: parseFloat(discount),
-        groups: selectedGroups,
-        dateFrom: formatDate(startDate),
-        createdAt: formatDate(paidDate),
-        timestamp: Timestamp.now(),
+      const newPaymentRef = await addDoc(collection(db, 'payments'), {
+      studentId: selectedStudent.id,
+      amount: parseFloat(amount.replace(',', '.')),
+      type: parseInt(type),
+      discount: parseFloat(discount),
+      groups: selectedGroups,
+      dateFrom: formatDate(startDate),
+      createdAt: formatDate(paidDate),
+      timestamp: Timestamp.now(),
+        status: 'active',
       });
 
       await updateDoc(doc(db, 'students', selectedStudent.id), {
         groups: arrayUnion(...selectedGroups),
+        lastPaymentId: newPaymentRef.id,
       });
 
+        console.log('✅ New payment ID:', newPaymentRef.id);
       // Reset form
       setSearchTerm('');
       setSelectedStudent(null);
