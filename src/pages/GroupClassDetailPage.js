@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   deleteField
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
@@ -37,7 +38,13 @@ function getNextDates(startFrom, weekday, count, groupId) {
   return result;
 }
 
-async function getValidClassPairs(payment, allGroups, db) {
+async function getValidClassPairs(payment, allGroups, db, thisGroupId) {
+  // Skip if not active
+  if (payment.status !== 'active') return [];
+
+  // Skip if this payment is not for the group in question
+  if (!payment.groups.includes(thisGroupId)) return [];
+
   const result = [];
   const startDate = parseDate(payment.dateFrom);
 
@@ -124,7 +131,7 @@ function GroupClassDetailPage() {
       const matched = [];
 
       for (const payment of payments) {
-        const pairs = await getValidClassPairs(payment, groups, db);
+        const pairs = await getValidClassPairs(payment, groups, db, groupId);
         const matchedPair = pairs.find(p => p.groupId === groupId && p.date === date);
         if (!matchedPair) continue;
 
@@ -184,10 +191,27 @@ function GroupClassDetailPage() {
     }
   };
 
+  const handleDeleteClass = async () => {
+    if (!window.confirm(`Delete class ${date} from group ${group?.name}?`)) return;
+    try {
+      await deleteDoc(doc(db, `groups/${groupId}/pastClasses`, date));
+      alert('✅ Class deleted');
+      navigate(`/group/${groupId}`);
+    } catch (err) {
+      console.error(err);
+      alert('❌ Failed to delete class');
+    }
+  };
+
   return (
     <div className="class-detail-page">
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
+      {user?.role === 'admin' && (
+        <button onClick={handleDeleteClass} style={{ backgroundColor: 'red', color: 'white' }}>
+          🗑 DELETE CLASS
+        </button>
+      )}
       {isCanceled ? (
         <h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>
       ) : (
