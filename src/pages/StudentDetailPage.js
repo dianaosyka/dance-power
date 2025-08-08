@@ -12,58 +12,7 @@ import {
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
-
-function getValidClasses(payment, groups, canceledMap) {
-  if (!payment || !payment.dateFrom) return [];
-  const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
-  const startDate = new Date(yyyy, mm - 1, dd);
-  const results = [];
-
-  const maxClasses = payment.type;
-  const dateMap = {};
-
-  for (const groupId of payment.groups) {
-    const group = groups.find(g => g.id === groupId);
-    if (!group) continue;
-
-    const openingDate = new Date(group.openingDate.split('.').reverse().join('-'));
-    const classDates = [];
-
-    let current = new Date(startDate);
-    while (classDates.length < maxClasses * 2) {
-      if (current.getDay() === group.dayOfWeek && current >= openingDate) {
-        const d = String(current.getDate()).padStart(2, '0');
-        const m = String(current.getMonth() + 1).padStart(2, '0');
-        const y = current.getFullYear();
-        const fullDate = `${d}.${m}.${y}`;
-        if (!canceledMap[groupId]?.includes(fullDate)) {
-          classDates.push({
-            date: fullDate,
-            groupId,
-            groupName: group.name,
-          });
-        }
-      }
-      current.setDate(current.getDate() + 1);
-    }
-
-    dateMap[groupId] = classDates;
-  }
-
-  while (results.length < maxClasses) {
-    for (const groupId of payment.groups) {
-      const next = dateMap[groupId]?.shift();
-      if (next) results.push(next);
-      if (results.length >= maxClasses) break;
-    }
-  }
-
-  return results.sort((b, a) => {
-    const [da, ma, ya] = a.date.split('.');
-    const [db, mb, yb] = b.date.split('.');
-    return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
-  });
-}
+import { getPaymentClasses } from '../utils/paymentsUtils'; // THIS IS YOUR UTILS FUNCTION
 
 function StudentDetailPage() {
   const { studentId } = useParams();
@@ -72,7 +21,6 @@ function StudentDetailPage() {
   const navigate = useNavigate();
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [canceledMap, setCanceledMap] = useState({});
   const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
 
@@ -80,6 +28,7 @@ function StudentDetailPage() {
   const studentPayments = payments
     .filter(p => p.studentId === studentId)
     .sort((a, b) => {
+      // Descending by dateFrom
       const [da, ma, ya] = a.dateFrom.split('.');
       const [db, mb, yb] = b.dateFrom.split('.');
       return new Date(`${yb}-${mb}-${db}`) - new Date(`${ya}-${ma}-${da}`);
@@ -87,20 +36,7 @@ function StudentDetailPage() {
 
   const currentPayment = studentPayments.length > 0 ? studentPayments[currentIndex] : null;
 
-  useEffect(() => {
-    if (!currentPayment) return;
-    const fetchCanceled = async () => {
-      const map = {};
-      for (const groupId of currentPayment.groups) {
-        const q = query(collection(db, `groups/${groupId}/canceledClasses`));
-        const snap = await getDocs(q);
-        map[groupId] = snap.docs.map(d => d.data().date);
-      }
-      setCanceledMap(map);
-    };
-    fetchCanceled();
-  }, [currentPayment, db]);
-
+  // Fetch absences
   useEffect(() => {
     const fetchAbsences = async () => {
       const ref = doc(db, 'students', studentId);
@@ -109,13 +45,25 @@ function StudentDetailPage() {
       setAbsences(data);
     };
     if (studentId) fetchAbsences();
-  }, [studentId]);
+  }, [studentId, db]);
 
+  // Fetch classes for current payment (using utility function!)
   useEffect(() => {
-    if (!currentPayment) return;
-    const validClasses = getValidClasses(currentPayment, groups, canceledMap);
-    setClasses(validClasses);
-  }, [currentPayment, canceledMap, groups]);
+    if (!currentPayment) {
+      setClasses([]);
+      return;
+    }
+    let active = true;
+    const fetchClasses = async () => {
+      
+  console.log('currentPayment: ',currentPayment);
+      const res = await getPaymentClasses({ payment: currentPayment, groups, db });
+
+      if (active) setClasses(res);
+    };
+    fetchClasses();
+    return () => { active = false; };
+  }, [currentPayment, groups, db]);
 
   const getAttendanceIcon = (groupId, date) => {
     const today = new Date();
@@ -132,6 +80,7 @@ function StudentDetailPage() {
       const toDelete = studentPayments[currentIndex];
       await deleteDoc(doc(db, 'payments', toDelete.id));
 
+      // Update student's lastPaymentId
       const newPayments = studentPayments.filter((_, i) => i !== currentIndex);
       const latest = newPayments[0]?.id || '';
       await updateDoc(doc(db, 'students', studentId), { lastPaymentId: latest });
@@ -233,12 +182,15 @@ function StudentDetailPage() {
           )}
         </div>
       </div>
-
       {user?.role === 'admin' && (
-        <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <button onClick={handleAddPayment} style={{ padding: '8px 16px' }}>➕ ADD PAYMENT</button>
-          <div style={{ marginTop: '10px' }}>
-            <button onClick={handleDeleteStudent} style={{ background: 'red', color: 'white' }}>DELETE STUDENT</button>
+        <div>
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <button onClick={handleAddPayment} style={{ padding: '8px 16px' }}>➕ ADD PAYMENT</button>
+          </div>
+          <div style={{ marginTop: '10px', textAlign: 'center' }}>
+            <button onClick={handleDeleteStudent} style={{ background:'red', color: 'white' }}>
+              DELETE STUDENT
+            </button>
           </div>
         </div>
       )}

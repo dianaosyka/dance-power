@@ -1,84 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  collection,
-  getDocs,
   doc,
   getDoc,
   setDoc,
   deleteDoc,
-  deleteField
+  deleteField,
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import { getPaymentClasses } from '../utils/paymentsUtils'; // <-- use your util!
 import './GroupClassDetailPage.css';
-
-function parseDate(dateStr) {
-  const [dd, mm, yyyy] = dateStr.split('.').map(Number);
-  return new Date(yyyy, mm - 1, dd);
-}
-
-function formatDate(date) {
-  return (
-    String(date.getDate()).padStart(2, '0') + '.' +
-    String(date.getMonth() + 1).padStart(2, '0') + '.' +
-    date.getFullYear()
-  );
-}
-
-function getNextDates(startFrom, weekday, count, groupId) {
-  const result = [];
-  const date = new Date(startFrom);
-  while (result.length < count) {
-    if (date.getDay() === weekday) {
-      result.push({ groupId, date: formatDate(new Date(date)) });
-    }
-    date.setDate(date.getDate() + 1);
-  }
-  return result;
-}
-
-async function getValidClassPairs(payment, allGroups, db, thisGroupId) {
-  // Skip if not active
-  if (payment.status !== 'active') return [];
-
-  // Skip if this payment is not for the group in question
-  if (!payment.groups.includes(thisGroupId)) return [];
-
-  const result = [];
-  const startDate = parseDate(payment.dateFrom);
-
-  for (const groupId of payment.groups) {
-    const group = allGroups.find(g => g.id === groupId);
-    if (!group) {
-      console.warn("Missing group:", groupId);
-      continue;
-    }
-
-    const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-    const validPast = pastSnap.docs
-      .map(doc => doc.data())
-      .filter(d => d.canceled !== true && parseDate(d.date) >= startDate)
-      .sort((a, b) => parseDate(a.date) - parseDate(b.date))
-      .map(d => ({ groupId, date: d.date }));
-
-    result.push(...validPast);
-  }
-
-  if (result.length < payment.type) {
-    const missing = payment.type - result.length;
-    const futurePerGroup = Math.ceil(missing / payment.groups.length);
-    for (const groupId of payment.groups) {
-      const group = allGroups.find(g => g.id === groupId);
-      if (!group) continue;
-      const future = getNextDates(new Date(), group.dayOfWeek, futurePerGroup, groupId);
-      result.push(...future);
-      if (result.length >= payment.type) break;
-    }
-  }
-
-  return result.slice(0, payment.type);
-}
 
 function GroupClassDetailPage() {
   const { groupId, date } = useParams();
@@ -95,8 +27,7 @@ function GroupClassDetailPage() {
   const [isCanceled, setIsCanceled] = useState(false);
 
   useEffect(() => {
-    const g = groups.find(g => g.id === groupId);
-    setGroup(g);
+    setGroup(groups.find(g => g.id === groupId));
   }, [groupId, groups]);
 
   useEffect(() => {
@@ -107,7 +38,7 @@ function GroupClassDetailPage() {
       setIsCanceled(data?.canceled === true);
     };
     fetchClassStatus();
-  }, [groupId, date]);
+  }, [groupId, date, db]);
 
   useEffect(() => {
     const fetchAbsences = async () => {
@@ -124,24 +55,43 @@ function GroupClassDetailPage() {
     fetchAbsences();
   }, [students, db]);
 
+  // MAIN LOGIC: show only students who are signed up for this group/date, with last active payment
   useEffect(() => {
     if (!group) return;
 
     const fetchSignups = async () => {
       const matched = [];
 
-      for (const payment of payments) {
-        const pairs = await getValidClassPairs(payment, groups, db, groupId);
-        const matchedPair = pairs.find(p => p.groupId === groupId && p.date === date);
-        if (!matchedPair) continue;
+      for (const student of students) {
+        // Find the last active payment for this group
+        const paymentsForGroup = payments
+          .filter(p =>
+            p.studentId === student.id &&
+            p.status === 'active' &&
+            Array.isArray(p.groups) &&
+            p.groups.includes(groupId)
+          )
+          .sort((a, b) => {
+            // Newest first (use timestamp or createdAt as fallback)
+            const ta = a.timestamp?.seconds || 0;
+            const tb = b.timestamp?.seconds || 0;
+            return tb - ta;
+          });
 
-        const student = students.find(s => s.id === payment.studentId);
+        if (!paymentsForGroup.length) continue;
+        const payment = paymentsForGroup[0];
+
+        // Get all classes (dates) for this payment
+        const classes = await getPaymentClasses({ payment, groups, db });
+        const matchedClass = classes.find(c => c.groupId === groupId && c.date === date);
+        if (!matchedClass) continue;
+
         const amount = user?.role === 'coach' ? 1 : payment.amount / payment.type;
-        const isAbsent = absences[student?.id]?.[date]?.includes(groupId);
+        const isAbsent = absences[student.id]?.[date]?.includes(groupId);
 
         matched.push({
-          id: student?.id,
-          name: student?.name,
+          id: student.id,
+          name: student.name,
           amount: amount.toFixed(2),
           absent: isAbsent,
         });
@@ -157,7 +107,7 @@ function GroupClassDetailPage() {
     };
 
     fetchSignups();
-  }, [group, payments, students, date, groupId, user, absences]);
+  }, [group, groupId, date, payments, students, absences, user, db, groups]);
 
   const toggleAttendance = async (studentId) => {
     const student = students.find(s => s.id === studentId);
@@ -184,7 +134,6 @@ function GroupClassDetailPage() {
         };
         await setDoc(ref, { absences: { [date]: newGroups } }, { merge: true });
       }
-
       setAbsences(newAbsences);
     } finally {
       setLoadingId(null);
