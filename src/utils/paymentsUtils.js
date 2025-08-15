@@ -121,58 +121,89 @@ export async function getPaymentClasses({ payment, groups, db }) {
   return validPast.slice(0, payment.type);
 }
 
-// (You can now add more payment-related functions here!)
-
 /**
- * Returns an array of students signed up for the given class (groupId+date).
- * - Only the student's lastPaymentId is considered
- * - Only if last payment is active, for the group, and covers the class date (using getPaymentClasses)
- * - Returns [{ student, payment, amount, absent }]
- * 
+ * Returns an array of students (via payments) signed up for the given class (groupId+date).
+ * - Iterates over ALL payments (not just student's lastPaymentId)
+ * - Only payments that are active, include the group, and cover the class date (using getPaymentClasses)
+ * - Returns [{ id, name, amount, absent }]
+ *
  * @param {Object} params
- * @param {String} groupId
- * @param {String} date (format: DD.MM.YYYY)
- * @param {Array} students
- * @param {Array} payments
- * @param {Array} groups
- * @param {Object} db
- * @param {Object} absences - (studentId: { date: [groupId, ...] })
- * @returns {Promise<Array<{id, name, amount, absent}>>}
+ * @param {String} params.groupId
+ * @param {String} params.date            // format: DD.MM.YYYY
+ * @param {Array}  params.students        // [{id, name, lastPaymentId, groups, ...}]
+ * @param {Array}  params.payments        // [{id, studentId?, status, groups, amount, type, ...}]
+ * @param {Array}  params.groups
+ * @param {Object} params.db
+ * @param {Object} params.absences        // (studentId: { [date]: [groupId, ...] })
+ * @param {Object} params.user            // {role: 'coach' | ...}
+ * @returns {Promise<Array<{id: string, name: string, amount: string, absent: boolean}>>}
  */
-export async function getClassSignedStudents({ groupId, date, students, payments, groups, db, absences, user }) {
-  const matched = [];
-  const studentLastPaymentMap = {};
+export async function getClassSignedStudentsByPayments({
+  groupId,
+  date,
+  students,
+  payments,
+  groups,
+  db,
+  absences,
+  user,
+}) {
+  const result = [];
 
-  students.forEach(s => {
-    if (!s.lastPaymentId) return;
-    const payment = payments.find(p => p.id === s.lastPaymentId);
-    if (payment && payment.status === 'active' && Array.isArray(payment.groups)) {
-      studentLastPaymentMap[s.id] = payment;
+  // Quick lookup for students by id
+  const studentsById = new Map(students.map(s => [s.id, s]));
+
+  // Fallback: map paymentId -> student if payment.studentId is missing
+  // (uses lastPaymentId heuristic)
+  const studentByLastPaymentId = new Map(
+    students
+      .filter(s => s.lastPaymentId)
+      .map(s => [s.lastPaymentId, s])
+  );
+
+  // Filter only relevant payments for this group & active
+  const candidatePayments = payments.filter(p =>
+    p &&
+    p.status === 'active' &&
+    Array.isArray(p.groups) &&
+    p.groups.includes(groupId)
+  );
+
+  for (const payment of candidatePayments) {
+    // Resolve student for this payment
+    let student =
+      (payment.studentId && studentsById.get(payment.studentId)) ||
+      studentByLastPaymentId.get(payment.id) ||
+      null;
+
+    if (!student) continue; // Can't attribute this payment to a student
+
+    // Optional: ensure the student is (or was) part of the group
+    // If you don't want this check, remove the next 4 lines.
+    if (!Array.isArray(student.groups) || !student.groups.includes(groupId)) {
+      // If the business logic says payment->group is enough, skip this check
+      // and allow attendance purely by payment coverage.
+      // continue;
     }
-  });
 
-  for (const student of students) {
-    const payment = studentLastPaymentMap[student.id];
-    if (payment && payment.groups.includes(groupId)) {
-      const paymentClasses = await getPaymentClasses({ payment, groups, db });
-      const foundClass = paymentClasses.find(
-        c => c.groupId === groupId && c.date === date
-      );
-      if (foundClass) {
-        const isAbsent = absences?.[student.id]?.[date]?.includes(groupId);
-        const amount = user?.role === 'coach'
-          ? 1
-          : payment.amount / payment.type;
+    // Does this payment cover the class?
+    const paymentClasses = await getPaymentClasses({ payment, groups, db });
+    const coversClass = paymentClasses?.some(
+      c => c.groupId === groupId && c.date === date
+    );
+    if (!coversClass) continue;
+    console.log('AAAAAAAAAAAAAAAAAAA Payment covers class:', payment.id, 'for student:', student.name);
 
-        matched.push({
-          id: student.id,
-          name: student.name,
-          amount: amount.toFixed(2),
-          absent: isAbsent,
-        });
-      }
-    }
+    const isAbsent = !!absences?.[student.id]?.[date]?.includes(groupId);
+    const amount = user?.role === 'coach' ? 1 : (payment.amount / payment.type);
+
+    result.push({
+      id: student.id,
+      name: student.name,
+      amount: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
+      absent: isAbsent,
+    });
   }
 
-  return matched;
+  return result;
 }

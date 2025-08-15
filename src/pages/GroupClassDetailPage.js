@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
-import { getPaymentClasses } from '../utils/paymentsUtils'; // <-- use your util!
+import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import './GroupClassDetailPage.css';
 
 function GroupClassDetailPage() {
@@ -55,50 +55,26 @@ function GroupClassDetailPage() {
     fetchAbsences();
   }, [students, db]);
 
-  // MAIN LOGIC: show only students who are signed up for this group/date, with last active payment
+  // MAIN LOGIC: show students signed up for this group/date, by scanning ALL payments
   useEffect(() => {
-    if (!group) return;
+    if (!group || !payments?.length || !students?.length) return;
 
     const fetchSignups = async () => {
-      const matched = [];
-
-      for (const student of students) {
-        // Find the last active payment for this group
-        const paymentsForGroup = payments
-          .filter(p =>
-            p.studentId === student.id &&
-            p.status === 'active' &&
-            Array.isArray(p.groups) &&
-            p.groups.includes(groupId)
-          )
-          .sort((a, b) => {
-            // Newest first (use timestamp or createdAt as fallback)
-            const ta = a.timestamp?.seconds || 0;
-            const tb = b.timestamp?.seconds || 0;
-            return tb - ta;
-          });
-
-        if (!paymentsForGroup.length) continue;
-        const payment = paymentsForGroup[0];
-
-        // Get all classes (dates) for this payment
-        const classes = await getPaymentClasses({ payment, groups, db });
-        const matchedClass = classes.find(c => c.groupId === groupId && c.date === date);
-        if (!matchedClass) continue;
-
-        const amount = user?.role === 'coach' ? 1 : payment.amount / payment.type;
-        const isAbsent = absences[student.id]?.[date]?.includes(groupId);
-
-        matched.push({
-          id: student.id,
-          name: student.name,
-          amount: amount.toFixed(2),
-          absent: isAbsent,
-        });
-      }
+      // Build signups by payments
+      const matched = await getClassSignedStudentsByPayments({
+        groupId,
+        date,
+        students,
+        payments,
+        groups,
+        db,
+        absences,
+        user,
+      });
 
       setSignedUp(matched);
 
+      // Your original total calculation logic
       const earned = user?.role === 'coach'
         ? matched.length * 1
         : (matched.reduce((sum, s) => sum + parseFloat(s.amount), 0) - 15);
@@ -107,7 +83,9 @@ function GroupClassDetailPage() {
     };
 
     fetchSignups();
+    // NOTE: absences affects the ✅/❌ icon; include it so UI updates when toggling
   }, [group, groupId, date, payments, students, absences, user, db, groups]);
+
 
   const toggleAttendance = async (studentId) => {
     const student = students.find(s => s.id === studentId);
