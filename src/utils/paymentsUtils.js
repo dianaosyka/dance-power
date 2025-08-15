@@ -36,9 +36,7 @@ function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupN
  * Skips canceled, sorts, and generates missing ones.
  */
 export async function getPaymentClasses({ payment, groups, db }) {
-  console.log('getPaymentClasses called with:', payment, groups);
   if (!payment || !payment.dateFrom || !Array.isArray(payment.groups)) return [];
-  console.log('getPaymentClasses');
 
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
   const paymentStart = new Date(yyyy, mm - 1, dd);
@@ -50,10 +48,8 @@ export async function getPaymentClasses({ payment, groups, db }) {
     const group = groups.find(g => g.id === groupId);
     if (!group) continue;
     const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-    console.log('GROUP', groupId, 'pastClasses:', pastSnap.docs.length);
     for (const doc of pastSnap.docs) {
       const d = doc.data();
-      console.log('doc.data() for group', groupId, ':', d);
       if (d.canceled) continue;
       if (!d.date) continue;
       const classDate = parseDate(d.date);
@@ -192,7 +188,6 @@ export async function getClassSignedStudentsByPayments({
       c => c.groupId === groupId && c.date === date
     );
     if (!coversClass) continue;
-    console.log('AAAAAAAAAAAAAAAAAAA Payment covers class:', payment.id, 'for student:', student.name);
 
     const isAbsent = !!absences?.[student.id]?.[date]?.includes(groupId);
     const amount = user?.role === 'coach' ? 1 : (payment.amount / payment.type);

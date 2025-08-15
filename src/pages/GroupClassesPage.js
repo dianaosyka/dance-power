@@ -38,7 +38,6 @@ function GroupClassesPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { groups, db, coaches } = useData();
-  console.log('Coaches imported:', coaches);
   
   const { user } = useUser();
 

@@ -95,7 +95,6 @@ function AddPaymentPage() {
         lastPaymentId: newPaymentRef.id,
       });
 
-        console.log('✅ New payment ID:', newPaymentRef.id);
       // Reset form
       setSearchTerm('');
       setSelectedStudent(null);

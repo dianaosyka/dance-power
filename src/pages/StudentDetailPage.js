@@ -56,7 +56,6 @@ function StudentDetailPage() {
     let active = true;
     const fetchClasses = async () => {
       
-  console.log('currentPayment: ',currentPayment);
       const res = await getPaymentClasses({ payment: currentPayment, groups, db });
 
       if (active) setClasses(res);

@@ -27,7 +27,6 @@ const snapshot = await getDocs(usersRef);
 export const coaches = snapshot.docs
   .map(doc => ({ id: doc.id, ...doc.data() }))
   .filter(user => user.role === "coach" || user.role === "admin");
-  console.log('Coaches:', coaches);
 
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
