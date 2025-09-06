@@ -79,7 +79,7 @@ export async function getPaymentClasses({ payment, groups, db }) {
     return {
       groupId,
       groupName: group.name,
-      gen: generateFutureDates(new Date(), group.dayOfWeek, afterDatesSet, groupId, group.name),
+      gen: generateFutureDates(paymentStart, group.dayOfWeek, afterDatesSet, groupId, group.name),
       lastDate: null
     };
   }).filter(Boolean);
@@ -173,14 +173,6 @@ export async function getClassSignedStudentsByPayments({
       null;
 
     if (!student) continue; // Can't attribute this payment to a student
-
-    // Optional: ensure the student is (or was) part of the group
-    // If you don't want this check, remove the next 4 lines.
-    if (!Array.isArray(student.groups) || !student.groups.includes(groupId)) {
-      // If the business logic says payment->group is enough, skip this check
-      // and allow attendance purely by payment coverage.
-      // continue;
-    }
 
     // Does this payment cover the class?
     const paymentClasses = await getPaymentClasses({ payment, groups, db });
