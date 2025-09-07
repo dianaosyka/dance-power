@@ -79,7 +79,7 @@ export async function getPaymentClasses({ payment, groups, db }) {
     return {
       groupId,
       groupName: group.name,
-      gen: generateFutureDates(paymentStart, group.dayOfWeek, afterDatesSet, groupId, group.name),
+      gen: generateFutureDates(validPast.length == 0? paymentStart: new Date(), group.dayOfWeek, afterDatesSet, groupId, group.name),
       lastDate: null
     };
   }).filter(Boolean);
