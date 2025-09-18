@@ -134,7 +134,7 @@ function GroupClassesPage() {
     setNewRent(15);
     setNewCanceled(false);
     setNewCoach('');
-    window.location.reload();
+    navigate(`/groups`);
   };
 
 

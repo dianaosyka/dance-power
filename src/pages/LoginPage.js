@@ -46,6 +46,7 @@ function LoginPage() {
 
       const userData = match.data();
       setUser({
+        id: match.id,
         email: userData.email,
         role: userData.role,
         groups: userData.groups || [],
