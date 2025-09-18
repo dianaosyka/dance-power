@@ -20,7 +20,6 @@ function GroupClassDetailPage() {
 
   const [group, setGroup] = useState(null);
   const [signedUp, setSignedUp] = useState([]);
-  const [total, setTotal] = useState(0);
   const [absences, setAbsences] = useState({});
   const [loadingId, setLoadingId] = useState(null);
   const [loadingAbsences, setLoadingAbsences] = useState(true);
@@ -81,28 +80,51 @@ function GroupClassDetailPage() {
 
       setSignedUp(matched);
 
+      
+
       // Your original total calculation logic
       console.log("START");
+
+      if (matched.length === 0) {
+        setEarned(0);
+        setForCoaches(0);
+        setAllEarned(0);
+        console.log("END");
+        return;
+      }
+
       setAllEarned((matched.reduce((sum, s) => sum + parseFloat(s.amount), 0)).toFixed(2));
+
+      var earnedLoc = 0;
+      var forCoachesLoc = 0;
+      console.log(coachesThisClass);
       
       if (user?.role === 'admin' && (coachesThisClass.includes(user.id))) {
-        setForCoaches(((coachesThisClass.length - 1) * matched.length).toFixed(2));
+        forCoachesLoc = (((coachesThisClass.length - 1) * matched.length).toFixed(2));
       } else if (user?.role === 'admin' && !(coachesThisClass.includes(user.id))) {
-        setForCoaches((coachesThisClass.length * matched.length).toFixed(2));
+        forCoachesLoc = ((coachesThisClass.length * matched.length).toFixed(2));
       }
-      setEarned((allEarned - rent - forCoaches).toFixed(2));
+      earnedLoc = (allEarned - rent - forCoaches).toFixed(2);
 
       if (user?.role === 'coach' && (coachesThisClass.includes(user.id))){
-        setEarned((matched.length * 1).toFixed(2));
+        earnedLoc = (matched.length * 1).toFixed(2);
+      } else if (user?.role === 'coach' && coachesThisClass.length === 0 && group.coach ===(user.id)){
+        earnedLoc = (matched.length * 1).toFixed(2);
+      } else if (user?.role === 'coach'){
+        earnedLoc = 2.00;
       }
 
-      console.log(allEarned, rent, forCoaches, user, coachesThisClass,earned);
+      setForCoaches(forCoachesLoc);
+      setEarned(earnedLoc);
+      
+      console.log(earned);
+      
       console.log("END");
     };
 
     fetchSignups();
     // NOTE: absences affects the ✅/❌ icon; include it so UI updates when toggling
-  }, [group, groupId, date, payments, students, absences, user, db, groups, allEarned, rent, forCoaches, coachesThisClass]);
+  }, [group, groupId, date, payments, students, absences, user, db, groups, rent, coachesThisClass]);
 
 
   const toggleAttendance = async (studentId) => {
@@ -161,7 +183,7 @@ function GroupClassDetailPage() {
           🗑 DELETE CLASS
         </button>
       )}
-      {isCanceled ? (
+      {(isCanceled || signedUp.length === 0)? (
         <h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>
       ) : (
         <>

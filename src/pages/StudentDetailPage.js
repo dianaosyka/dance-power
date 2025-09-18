@@ -17,7 +17,7 @@ import { getPaymentClasses } from '../utils/paymentsUtils'; // THIS IS YOUR UTIL
 function StudentDetailPage() {
   const { studentId } = useParams();
   const { db, students, payments, groups } = useData();
-  const { user } = useUser();
+  const { user, setUser } = useUser();
   const navigate = useNavigate();
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -134,8 +134,11 @@ function StudentDetailPage() {
   return (
     <div>
       <div className="student-card">
+        <div className="top-row">
+          <p>{student.phone}</p>
+          {(user?.role !== "coach" && user?.role !== "admin") && <button className="close-btn" onClick={() => setUser(null)}>✕</button>}
+        </div>
         {(user?.role === 'admin' || user?.role === 'coach') && (<p>{student.id}</p>)}
-        <p>{student.phone}</p>
         <h2>{student.name.toUpperCase()}</h2>
         {currentPayment?.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
         <p>START DATE: {currentPayment.dateFrom}</p>
