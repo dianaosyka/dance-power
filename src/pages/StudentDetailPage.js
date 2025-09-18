@@ -115,11 +115,18 @@ function StudentDetailPage() {
 
   if (!currentPayment) {
     return (
-      <div className="student-card">
-        <p>{student.phone}</p>
-        <h2>{student.name.toUpperCase()}</h2>
-        <h3>No payments.</h3>
+      <div>
+        <div className="student-card">
+          <p>{student.phone}</p>
+          <h2>{student.name.toUpperCase()}</h2>
+          <h3>No payments.</h3>
         <button onClick={handleAddPayment}>➕ ADD PAYMENT</button>
+        </div>
+        {(user?.role === 'admin') && (<div style={{ marginTop: '10px', textAlign: 'center' }}>
+          <button onClick={handleDeleteStudent} style={{ background:'red', color: 'white' }}>
+                DELETE STUDENT
+          </button>
+        </div>)}
       </div>
     );
   }

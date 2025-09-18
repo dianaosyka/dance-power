@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '../context/firebase';
 import {
-  addDoc,
   collection,
   Timestamp,
-  updateDoc,
   doc,
-  arrayUnion
+  arrayUnion,
+  writeBatch, // <-- atomic writes
 } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './AddPaymentPage.css';
@@ -40,6 +39,7 @@ function AddPaymentPage() {
   const [startDate, setStartDate] = useState(getTodayDate());
   const [paidDate, setPaidDate] = useState(getTodayDate());
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false); // <-- prevent double-clicks
 
   const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -65,6 +65,8 @@ function AddPaymentPage() {
   }, [students, location.search]);
 
   const handleSubmit = async () => {
+    if (isSubmitting) return; // block double-clicks
+
     if (
       !selectedStudent ||
       !amount ||
@@ -77,23 +79,47 @@ function AddPaymentPage() {
       return;
     }
 
+    const amountNum = parseFloat(String(amount).replace(',', '.'));
+    const typeNum = parseInt(String(type), 10);
+    const discountNum = parseFloat(String(discount));
+
+    if (
+      Number.isNaN(amountNum) ||
+      Number.isNaN(typeNum) ||
+      typeNum <= 0 ||
+      Number.isNaN(discountNum)
+    ) {
+      alert('Please enter valid numbers for amount/type/discount');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const newPaymentRef = await addDoc(collection(db, 'payments'), {
-      studentId: selectedStudent.id,
-      amount: parseFloat(amount.replace(',', '.')),
-      type: parseInt(type),
-      discount: parseFloat(discount),
-      groups: selectedGroups,
-      dateFrom: formatDate(startDate),
-      createdAt: formatDate(paidDate),
-      timestamp: Timestamp.now(),
+      const batch = writeBatch(db);
+
+      // Prepare new payment doc with an ID
+      const paymentRef = doc(collection(db, 'payments'));
+
+      const paymentData = {
+        studentId: selectedStudent.id,
+        amount: amountNum,
+        type: typeNum,
+        discount: discountNum,
+        groups: selectedGroups,
+        dateFrom: formatDate(startDate),
+        createdAt: formatDate(paidDate),
+        timestamp: Timestamp.now(),
         status: 'active',
+      };
+
+      // Atomic: set payment + update student together
+      batch.set(paymentRef, paymentData);
+      batch.update(doc(db, 'students', selectedStudent.id), {
+        groups: arrayUnion(...selectedGroups),
+        lastPaymentId: paymentRef.id,
       });
 
-      await updateDoc(doc(db, 'students', selectedStudent.id), {
-        groups: arrayUnion(...selectedGroups),
-        lastPaymentId: newPaymentRef.id,
-      });
+      await batch.commit(); // all-or-nothing
 
       // Reset form
       setSearchTerm('');
@@ -106,10 +132,12 @@ function AddPaymentPage() {
       setSelectedGroups([]);
 
       // Go back to student detail
-      navigate(`/student/${selectedStudent.id}`);
+      navigate(`/student/${paymentData.studentId}`);
     } catch (err) {
       console.error(err);
-      alert('❌ Error saving payment');
+      alert('❌ Error saving payment. Nothing was saved.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -151,6 +179,7 @@ function AddPaymentPage() {
           className="input"
           value={amount}
           onChange={e => setAmount(e.target.value)}
+          inputMode="decimal"
         />
       </div>
 
@@ -212,11 +241,18 @@ function AddPaymentPage() {
           className="input"
           value={discount}
           onChange={e => setDiscount(e.target.value)}
+          placeholder="0"
+          inputMode="decimal"
         />
       </div>
 
-      <button className="confirm-button" onClick={handleSubmit}>
-        ✅
+      <button
+        className="confirm-button"
+        onClick={handleSubmit}
+        disabled={isSubmitting}
+        title={isSubmitting ? 'Saving…' : 'Save payment'}
+      >
+        {isSubmitting ? 'Saving…' : '✅'}
       </button>
     </div>
   );

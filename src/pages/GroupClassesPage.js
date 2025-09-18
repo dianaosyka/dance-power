@@ -4,8 +4,7 @@ import {
   collection,
   getDocs,
   doc,
-  updateDoc,
-  setDoc,
+  runTransaction,
   Timestamp
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
@@ -38,7 +37,6 @@ function GroupClassesPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { groups, db, coaches } = useData();
-  
   const { user } = useUser();
 
   const [group, setGroup] = useState(null);
@@ -54,6 +52,10 @@ function GroupClassesPage() {
   const [newCanceled, setNewCanceled] = useState(false);
   const [newCoach, setNewCoach] = useState('');
 
+  // guards
+  const [isToggling, setIsToggling] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+
   useEffect(() => {
     const g = groups.find(g => g.id === groupId);
     setGroup(g);
@@ -63,7 +65,7 @@ function GroupClassesPage() {
     const fetchPastClasses = async () => {
       if (!groupId) return;
       const snap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-      const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       fetched.sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
       setPastDates(fetched);
     };
@@ -86,32 +88,44 @@ function GroupClassesPage() {
   };
 
   const handleToggleCancel = async () => {
-    if (!selectedDate || !groupId) return;
+    if (!selectedDate || !groupId || isToggling) return;
 
+    setIsToggling(true);
     const ref = doc(db, `groups/${groupId}/pastClasses`, selectedDate);
-    const current = pastDates.find(p => p.date === selectedDate);
-    const newStatus = !(current?.canceled ?? false);
 
     try {
-      await updateDoc(ref, {
-        canceled: newStatus,
-        timestamp: Timestamp.now(),
+      // Atomic flip on the server to avoid race/double-click
+      const newStatus = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) {
+          throw new Error('Class document does not exist.');
+        }
+        const current = !!snap.data().canceled;
+        tx.update(ref, {
+          canceled: !current,
+          timestamp: Timestamp.now(),
+        });
+        return !current;
       });
 
+      // Reflect locally
       setPastDates(prev =>
         prev.map(p =>
           p.date === selectedDate ? { ...p, canceled: newStatus } : p
         )
       );
     } catch (err) {
-      console.error('Error updating canceled status:', err);
+      console.error('Error toggling canceled status:', err);
+      alert('❌ Failed to toggle class status.');
+    } finally {
+      setIsToggling(false);
+      setShowModal(false);
+      setSelectedDate(null);
     }
-
-    setShowModal(false);
-    setSelectedDate(null);
   };
 
   const handleAddClass = async () => {
+    if (isAdding) return;
     if (!groupId || !newDate || !newCoach) {
       alert('Please fill in all fields');
       return;
@@ -119,24 +133,40 @@ function GroupClassesPage() {
 
     const [yyyy, mm, dd] = newDate.split('-');
     const formattedDate = `${dd}.${mm}.${yyyy}`;
-
     const ref = doc(db, `groups/${groupId}/pastClasses`, formattedDate);
-    await setDoc(ref, {
-      date: formattedDate,
-      coach: [newCoach],
-      rent: Number(newRent),
-      canceled: Boolean(newCanceled),
-      timestamp: Timestamp.now(),
-    });
 
-    setShowAddForm(false);
-    setNewDate('');
-    setNewRent(15);
-    setNewCanceled(false);
-    setNewCoach('');
-    navigate(`/groups`);
+    setIsAdding(true);
+    try {
+      // Create only if not exists (atomic)
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (snap.exists()) {
+          throw new Error('This class date already exists.');
+        }
+        tx.set(ref, {
+          date: formattedDate,
+          coach: [newCoach],
+          rent: Number(newRent),
+          canceled: Boolean(newCanceled),
+          timestamp: Timestamp.now(),
+        });
+      });
+
+      // Optionally refresh list immediately (or keep navigate)
+      // Navigate back to list
+      setShowAddForm(false);
+      setNewDate('');
+      setNewRent(15);
+      setNewCanceled(false);
+      setNewCoach('');
+      navigate(`/groups`);
+    } catch (err) {
+      console.error(err);
+      alert(`❌ Error adding class: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsAdding(false);
+    }
   };
-
 
   return (
     <div className="group-page">
@@ -202,9 +232,12 @@ function GroupClassesPage() {
             <span
               className="check"
               onClick={() => {
+                if (isToggling) return;
                 setSelectedDate(past.date);
                 setShowModal(true);
               }}
+              title={isToggling ? 'Working…' : (past.canceled ? 'Uncancel' : 'Cancel')}
+              style={{ opacity: isToggling ? 0.6 : 1, pointerEvents: isToggling ? 'none' : 'auto' }}
             >
               {past.canceled ? '❌' : '✅'}
             </span>
@@ -230,8 +263,10 @@ function GroupClassesPage() {
                 : 'Cancel this class?'}
             </p>
             <div className="modal-buttons">
-              <button onClick={() => setShowModal(false)}>No</button>
-              <button onClick={handleToggleCancel}>Yes</button>
+              <button onClick={() => setShowModal(false)} disabled={isToggling}>No</button>
+              <button onClick={handleToggleCancel} disabled={isToggling}>
+                {isToggling ? 'Working…' : 'Yes'}
+              </button>
             </div>
           </div>
         </div>
@@ -245,16 +280,19 @@ function GroupClassesPage() {
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
+              disabled={isAdding}
             />
             <input
               type="number"
               placeholder="Rent (€)"
               value={newRent}
               onChange={(e) => setNewRent(e.target.value)}
+              disabled={isAdding}
             />
             <select
               value={newCoach}
               onChange={(e) => setNewCoach(e.target.value)}
+              disabled={isAdding}
             >
               <option value="">Select coach</option>
               {coaches?.map((coach) => (
@@ -269,12 +307,15 @@ function GroupClassesPage() {
                 type="checkbox"
                 checked={newCanceled}
                 onChange={(e) => setNewCanceled(e.target.checked)}
+                disabled={isAdding}
               />
               Canceled
             </label>
             <div className="modal-buttons">
-              <button onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button onClick={handleAddClass}>Add</button>
+              <button onClick={() => setShowAddForm(false)} disabled={isAdding}>Cancel</button>
+              <button onClick={handleAddClass} disabled={isAdding}>
+                {isAdding ? 'Adding…' : 'Add'}
+              </button>
             </div>
           </div>
         </div>
