@@ -48,9 +48,9 @@ function StudentsListPage() {
 
         <div className="people-header">
           <h3 className="people-title">PEOPLE</h3>
-          <button className="add-student-button" onClick={() => setShowModal(true)}>
+          {user?.role === "admin" &&<button className="add-student-button" onClick={() => setShowModal(true)}>
             +
-          </button>
+          </button>}
         </div>
 
         <br />
