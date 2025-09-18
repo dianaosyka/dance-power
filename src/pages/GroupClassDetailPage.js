@@ -210,19 +210,19 @@ function GroupClassDetailPage() {
                 <span>FOR COACHES: {forCoaches}€</span>
               </div>
             )}
-          {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<h3>EARNED:</h3>}
+          {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<h3>EARNED:</h3>}
           {(loadingAbsences || !group || !signedUp?.length) ? (
             <img src="/loading.webp" alt="Loading…" width="32" height="32" />
           ) : (
             <>
-            {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<h1 style={{ fontSize: '36px' }}>{earned}€</h1>}
+            {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<h1 style={{ fontSize: '36px' }}>{earned}€</h1>}
 
           </>
         )}
             <h3>PEOPLE</h3>
             <div className="classes-header">
               <span>PERSON</span>
-              {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<span>MONEY</span>}
+              {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<span>MONEY</span>}
               <span>ATTENDED</span>
             </div>
 
