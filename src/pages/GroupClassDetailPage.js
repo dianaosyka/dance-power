@@ -238,7 +238,7 @@ function GroupClassDetailPage() {
               return (
                 <li key={i} className="class-item">
                   <span onClick={() => navigate(`/student/${s.id}`)}>{i + 1} {s.name?.slice(0, 30)}</span>
-                  {user?.role === "coach" && coachesThisClass.includes(user.id) && <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
+                  {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") && <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
                   }
                   <span
                     style={{ cursor: isFuture ? 'not-allowed' : 'pointer' }}
