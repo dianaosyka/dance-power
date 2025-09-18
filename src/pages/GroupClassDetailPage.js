@@ -111,7 +111,7 @@ function GroupClassDetailPage() {
       } else if (user?.role === 'coach' && coachesThisClass.length === 0 && group.coach ===(user.id)){
         earnedLoc = (matched.length * 1).toFixed(2);
       } else if (user?.role === 'coach'){
-        earnedLoc = 2.00;
+        earnedLoc = 0;
       }
 
       setForCoaches(forCoachesLoc);
@@ -210,19 +210,19 @@ function GroupClassDetailPage() {
                 <span>FOR COACHES: {forCoaches}€</span>
               </div>
             )}
-          <h3>EARNED:</h3>
+          {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<h3>EARNED:</h3>}
           {(loadingAbsences || !group || !signedUp?.length) ? (
             <img src="/loading.webp" alt="Loading…" width="32" height="32" />
           ) : (
             <>
-            <h1 style={{ fontSize: '36px' }}>{earned}€</h1>
+            {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<h1 style={{ fontSize: '36px' }}>{earned}€</h1>}
 
           </>
         )}
             <h3>PEOPLE</h3>
             <div className="classes-header">
               <span>PERSON</span>
-              <span>MONEY</span>
+              {user?.role === "coach" && coachesThisClass?.includes(user.id) &&<span>MONEY</span>}
               <span>ATTENDED</span>
             </div>
 
@@ -238,7 +238,8 @@ function GroupClassDetailPage() {
               return (
                 <li key={i} className="class-item">
                   <span onClick={() => navigate(`/student/${s.id}`)}>{i + 1} {s.name?.slice(0, 30)}</span>
-                  <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
+                  {user?.role === "coach" && coachesThisClass.includes(user.id) && <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
+                  }
                   <span
                     style={{ cursor: isFuture ? 'not-allowed' : 'pointer' }}
                     onClick={() => !isFuture && toggleAttendance(s.id)}
