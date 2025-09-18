@@ -19,12 +19,12 @@ function GroupClassDetailPage() {
   const { user } = useUser();
 
   const [group, setGroup] = useState(null);
-  const [signedUp, setSignedUp] = useState([]);
+  const [signedUp, setSignedUp] = useState(undefined);
   const [absences, setAbsences] = useState({});
   const [loadingId, setLoadingId] = useState(null);
   const [loadingAbsences, setLoadingAbsences] = useState(true);
   const [isCanceled, setIsCanceled] = useState(false);
-  const [coachesThisClass, setCoaches] = useState([]);
+  const [coachesThisClass, setCoaches] = useState(undefined);
   const [rent, setRent] = useState(null);
   const [earned, setEarned] = useState(0);
   const [forCoaches, setForCoaches] = useState(0);
@@ -63,7 +63,7 @@ function GroupClassDetailPage() {
 
   // MAIN LOGIC: show students signed up for this group/date, by scanning ALL payments
   useEffect(() => {
-    if (!group || !payments?.length || !students?.length) return;
+    if (!group || !payments?.length || !students?.length || coachesThisClass === undefined) return;
 
     const fetchSignups = async () => {
       // Build signups by payments
@@ -183,10 +183,12 @@ function GroupClassDetailPage() {
           🗑 DELETE CLASS
         </button>
       )}
-      {(isCanceled || signedUp.length === 0)? (
-        <h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>
-      ) : (
-        <>
+      {signedUp?.length === 0
+      ? (isCanceled 
+            ? (<h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>)
+            : (<h3 style={{ color: 'red' }}>🚫 NO PEOPLE</h3>)
+        ) : (
+          <>
 
         <div className="classes-header">
         COACHES:
@@ -209,7 +211,7 @@ function GroupClassDetailPage() {
               </div>
             )}
           <h3>EARNED:</h3>
-          {(loadingAbsences || !group || !signedUp.length) ? (
+          {(loadingAbsences || !group || !signedUp?.length) ? (
             <img src="/loading.webp" alt="Loading…" width="32" height="32" />
           ) : (
             <>
@@ -225,7 +227,7 @@ function GroupClassDetailPage() {
             </div>
 
           <ul className="student-list">
-            {signedUp.map((s, i) => {
+            {signedUp?.map((s, i) => {
               const today = new Date();
               const [dd, mm, yyyy] = date.split('.').map(Number);
               const classDate = new Date(yyyy, mm - 1, dd);
