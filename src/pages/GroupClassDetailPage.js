@@ -26,9 +26,6 @@ function GroupClassDetailPage() {
   const [isCanceled, setIsCanceled] = useState(false);
   const [coachesThisClass, setCoaches] = useState(undefined);
   const [rent, setRent] = useState(null);
-  const [earned, setEarned] = useState(0);
-  const [forCoaches, setForCoaches] = useState(0);
-  const [allEarned, setAllEarned] = useState(0);
 
   useEffect(() => {
     setGroup(groups.find(g => g.id === groupId));
@@ -41,7 +38,8 @@ function GroupClassDetailPage() {
       const data = snap.exists() ? snap.data() : {};
       setIsCanceled(data?.canceled === true);
       setCoaches(data?.coach || []);
-      setRent(data?.rent || 15);
+      setRent(data?.rent ?? 15);
+      console.log('rent for class:', data?.rent ?? 15);
     };
     fetchClassStatus();
   }, [groupId, date, db]);
@@ -61,12 +59,62 @@ function GroupClassDetailPage() {
     fetchAbsences();
   }, [students, db]);
 
-  // MAIN LOGIC: show students signed up for this group/date, by scanning ALL payments
-  useEffect(() => {
-    if (!group || !payments?.length || !students?.length || coachesThisClass === undefined) return;
+  function computeEarnings({ matched, user, coachesThisClass, rent, group }) {
+    // total earned from payments
+    const total = matched.reduce(
+      (sum, s) => sum + Number.parseFloat(s?.amount ?? 0),
+      0
+    );
 
-    const fetchSignups = async () => {
-      // Build signups by payments
+    // defaults
+    let forCoachesLoc = 0;
+    let earnedLoc = 0;
+
+    // ADMIN logic
+    if (user?.role === "admin") {
+      const includesCoach = coachesThisClass?.includes?.(user.id);
+      const coachCount = coachesThisClass?.length ?? 0;
+
+      if (includesCoach) {
+        forCoachesLoc = (coachCount - 1) * matched.length;
+      } else {
+        forCoachesLoc = coachCount * matched.length;
+      }
+
+      // use purely local totals, not state
+      earnedLoc = total - Number(rent ?? 0) - forCoachesLoc;
+    }
+
+    // COACH logic
+    if (user?.role === "coach") {
+      const isInThisClass = coachesThisClass?.includes?.(user.id);
+      const isGroupCoachAndNoCoachesListed =
+        (coachesThisClass?.length ?? 0) === 0 && user?.id === group?.coach;
+
+      if (isInThisClass || isGroupCoachAndNoCoachesListed) {
+        earnedLoc = matched.length * 1;
+      } else {
+        earnedLoc = 0;
+      }
+    }
+
+    return {
+      total,
+      forCoachesLoc,
+      earnedLoc,
+    };
+  }
+
+  useEffect(() => {
+    if (
+      !group ||
+      !payments?.length ||
+      !students?.length ||
+      coachesThisClass === undefined
+    ) return;
+
+    (async () => {
+      // get matched signups
       const matched = await getClassSignedStudentsByPayments({
         groupId,
         date,
@@ -80,52 +128,34 @@ function GroupClassDetailPage() {
 
       setSignedUp(matched);
 
-      
-
-      // Your original total calculation logic
-      console.log("START");
-
       if (matched.length === 0) {
-        setEarned(0);
-        setForCoaches(0);
-        setAllEarned(0);
-        console.log("END");
         return;
       }
 
-      setAllEarned((matched.reduce((sum, s) => sum + parseFloat(s.amount), 0)).toFixed(2));
+      const { total, forCoachesLoc, earnedLoc } = computeEarnings({
+        matched,
+        user,
+        coachesThisClass,
+        rent,
+        group,
+      });
 
-      var earnedLoc = 0;
-      var forCoachesLoc = 0;
-      console.log(coachesThisClass);
-      
-      if (user?.role === 'admin' && (coachesThisClass.includes(user.id))) {
-        forCoachesLoc = (((coachesThisClass.length - 1) * matched.length).toFixed(2));
-      } else if (user?.role === 'admin' && !(coachesThisClass.includes(user.id))) {
-        forCoachesLoc = ((coachesThisClass.length * matched.length).toFixed(2));
-      }
-      earnedLoc = (allEarned - rent - forCoaches).toFixed(2);
-
-      if (user?.role === 'coach' && (coachesThisClass.includes(user.id))){
-        earnedLoc = (matched.length * 1).toFixed(2);
-      } else if (user?.role === 'coach' && coachesThisClass.length === 0 && group.coach ===(user.id)){
-        earnedLoc = (matched.length * 1).toFixed(2);
-      } else if (user?.role === 'coach'){
-        earnedLoc = 0;
-      }
-
-      setForCoaches(forCoachesLoc);
-      setEarned(earnedLoc);
-      
-      console.log(earned);
-      
-      console.log("END");
-    };
-
-    fetchSignups();
-    // NOTE: absences affects the ✅/❌ icon; include it so UI updates when toggling
+      console.log('Computed earnings:', { total, forCoachesLoc, earnedLoc });
+    })();
   }, [group, groupId, date, payments, students, absences, user, db, groups, rent, coachesThisClass]);
 
+  const earnings = React.useMemo(() => {
+    if (!signedUp || !Array.isArray(signedUp) || signedUp.length === 0) {
+      return { total: 0, forCoachesLoc: 0, earnedLoc: 0 };
+    }
+    return computeEarnings({
+      matched: signedUp,
+      user,
+      coachesThisClass,
+      rent,
+      group,
+    });
+  }, [signedUp, user, coachesThisClass, rent, group]);
 
   const toggleAttendance = async (studentId) => {
     const student = students.find(s => s.id === studentId);
@@ -169,10 +199,11 @@ function GroupClassDetailPage() {
       alert('❌ Failed to delete class');
     }
   };
+
   const coachEmailById = React.useMemo(
-  () => new Map((coaches || []).map(c => [c.id, c.email])),
-  [coaches]
-);
+    () => new Map((coaches || []).map(c => [c.id, c.email])),
+    [coaches]
+  );
 
   return (
     <div className="class-detail-page">
@@ -184,47 +215,47 @@ function GroupClassDetailPage() {
         </button>
       )}
       {signedUp?.length === 0
-      ? (isCanceled 
+        ? (isCanceled
             ? (<h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>)
             : (<h3 style={{ color: 'red' }}>🚫 NO PEOPLE</h3>)
-        ) : (
-          <>
-
-        <div className="classes-header">
-        COACHES:
-        {coachesThisClass?.length ? (
-          coachesThisClass.map((id) => {
-            const emailOrId = coachEmailById.get(id) ?? String(id);
-            const label = String(emailOrId).split('@')[0].toUpperCase();
-            return <span key={id} style={{ marginLeft: 6 }}>{label}</span>;
-          })
-        ) : (
-          <span>—</span>
-        )}
-      </div>
+          ) : (
+        <>
+          <div className="classes-header">
+            COACHES:
+            {coachesThisClass?.length ? (
+              coachesThisClass.map((id) => {
+                const emailOrId = coachEmailById.get(id) ?? String(id);
+                const label = String(emailOrId).split('@')[0].toUpperCase();
+                return <span key={id} style={{ marginLeft: 6 }}>{label}</span>;
+              })
+            ) : (
+              <span>—</span>
+            )}
+          </div>
 
           {user?.role === "admin" && (
-              <div className="classes-header">
-                <span>ALL EARNED: {allEarned}€</span>
-                <span>FOR RENT {rent}€</span>
-                <span>FOR COACHES: {forCoaches}€</span>
-              </div>
-            )}
-          {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<h3>EARNED:</h3>}
-          {(loadingAbsences || !group || !signedUp?.length) ? (
+            <div className="classes-header">
+              <span>ALL EARNED: {earnings.total.toFixed(2)}€</span>
+              <span>FOR RENT {Number(rent ?? 0).toFixed(2)}€</span>
+              <span>FOR COACHES: {earnings.forCoachesLoc.toFixed(2)}€</span>
+            </div>
+          )}
+          {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") && <h3>EARNED:</h3>}
+          {(!group || !signedUp?.length) ? (
             <img src="/loading.webp" alt="Loading…" width="32" height="32" />
           ) : (
             <>
-            {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<h1 style={{ fontSize: '36px' }}>{earned}€</h1>}
-
-          </>
-        )}
-            <h3>PEOPLE</h3>
-            <div className="classes-header">
-              <span>PERSON</span>
-              {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&<span>MONEY</span>}
-              <span>ATTENDED</span>
-            </div>
+              {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&
+                <h1 style={{ fontSize: '36px' }}>{earnings.earnedLoc.toFixed(2)}€</h1>
+              }
+            </>
+          )}
+          <h3>PEOPLE</h3>
+          <div className="classes-header">
+            <span>PERSON</span>
+            {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") && <span>MONEY</span>}
+            <span>ATTENDED</span>
+          </div>
 
           <ul className="student-list">
             {signedUp?.map((s, i) => {
@@ -238,7 +269,8 @@ function GroupClassDetailPage() {
               return (
                 <li key={i} className="class-item">
                   <span onClick={() => navigate(`/student/${s.id}`)}>{i + 1} {s.name?.slice(0, 30)}</span>
-                  {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") && <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
+                  {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&
+                    <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
                   }
                   <span
                     style={{ cursor: isFuture ? 'not-allowed' : 'pointer' }}
