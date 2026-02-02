@@ -211,7 +211,7 @@ function AddPaymentPage() {
           onChange={e => setType(e.target.value)}
         >
           <option value="">Select...</option>
-          {[1, 2, 4, 8, 12, 24].map((num) => (
+          {[1, 2, 3, 4, 8, 12, 24].map((num) => (
             <option key={num} value={num}>
               {num} CLASSES
             </option>
