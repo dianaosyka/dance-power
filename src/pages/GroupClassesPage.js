@@ -48,7 +48,7 @@ function GroupClassesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
 
   const [newDate, setNewDate] = useState('');
-  const [newRent, setNewRent] = useState(15);
+  const [newRent, setNewRent] = useState(0);
   const [newCanceled, setNewCanceled] = useState(false);
   const [newCoach, setNewCoach] = useState('');
 
@@ -156,7 +156,7 @@ function GroupClassesPage() {
       // Navigate back to list
       setShowAddForm(false);
       setNewDate('');
-      setNewRent(15);
+      setNewRent(0);
       setNewCanceled(false);
       setNewCoach('');
       navigate(`/groups`);
@@ -275,13 +275,19 @@ function GroupClassesPage() {
       {showAddForm && (
         <div className="modal-overlay">
           <div className="modal-box">
+            <div className="inner-box">
             <h3>➕ ADD NEW PAST CLASS</h3>
+            <label className="labels-inputs">Date:</label>
+            <br></br>
             <input
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
               disabled={isAdding}
             />
+            <br></br>
+            <label className="labels-inputs">Rent:</label>
+            <br></br>
             <input
               type="number"
               placeholder="Rent (€)"
@@ -289,6 +295,9 @@ function GroupClassesPage() {
               onChange={(e) => setNewRent(e.target.value)}
               disabled={isAdding}
             />
+            <br></br>
+            <label className="labels-inputs">Coach:</label>
+            <br></br>
             <select
               value={newCoach}
               onChange={(e) => setNewCoach(e.target.value)}
@@ -297,12 +306,14 @@ function GroupClassesPage() {
               <option value="">Select coach</option>
               {coaches?.map((coach) => (
                 <option key={coach.id} value={coach.id}>
-                  {coach.email}
+                  {coach.name}
                 </option>
               ))}
             </select>
+            <br></br>
 
             <label style={{ marginTop: '10px' }}>
+              <br></br>
               <input
                 type="checkbox"
                 checked={newCanceled}
@@ -311,6 +322,7 @@ function GroupClassesPage() {
               />
               Canceled
             </label>
+            </div>
             <div className="modal-buttons">
               <button onClick={() => setShowAddForm(false)} disabled={isAdding}>Cancel</button>
               <button onClick={handleAddClass} disabled={isAdding}>

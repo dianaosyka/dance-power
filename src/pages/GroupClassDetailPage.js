@@ -38,8 +38,8 @@ function GroupClassDetailPage() {
       const data = snap.exists() ? snap.data() : {};
       setIsCanceled(data?.canceled === true);
       setCoaches(data?.coach || []);
-      setRent(data?.rent ?? 15);
-      console.log('rent for class:', data?.rent ?? 15);
+      setRent(data?.rent ?? 0);
+      console.log('rent for class:', data?.rent ?? 0);
     };
     fetchClassStatus();
   }, [groupId, date, db]);
@@ -200,8 +200,8 @@ function GroupClassDetailPage() {
     }
   };
 
-  const coachEmailById = React.useMemo(
-    () => new Map((coaches || []).map(c => [c.id, c.email])),
+  const coachNameById = React.useMemo(
+    () => new Map((coaches || []).map(c => [c.id, c.name])),
     [coaches]
   );
 
@@ -224,7 +224,7 @@ function GroupClassDetailPage() {
             COACHES:
             {coachesThisClass?.length ? (
               coachesThisClass.map((id) => {
-                const emailOrId = coachEmailById.get(id) ?? String(id);
+                const emailOrId = coachNameById.get(id) ?? String(id);
                 const label = String(emailOrId).split('@')[0].toUpperCase();
                 return <span key={id} style={{ marginLeft: 6 }}>{label}</span>;
               })

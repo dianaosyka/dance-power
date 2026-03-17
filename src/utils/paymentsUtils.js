@@ -6,6 +6,12 @@ function parseDate(dateStr) {
   return new Date(yyyy, mm - 1, dd);
 }
 
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return 23 * 60 + 59;
+  const [hh, mm] = timeStr.split(':').map(Number);
+  return (hh || 0) * 60 + (mm || 0);
+}
+
 function formatDate(date) {
   return (
     String(date.getDate()).padStart(2, '0') + '.' +
@@ -14,7 +20,7 @@ function formatDate(date) {
   );
 }
 
-function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupName) {
+function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupName, groupTime) {
   const date = new Date(startFrom);
   while (true) {
     if (date.getDay() === weekday) {
@@ -24,6 +30,7 @@ function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupN
           date: dStr,
           groupId,
           groupName,
+          groupTime,
         };
       }
     }
@@ -33,7 +40,7 @@ function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupN
 
 /**
  * Returns up to `payment.type` valid class dates (past and generated future) for all groups in this payment.
- * Skips canceled, sorts, and generates missing ones.
+ * Skips canceled, sorts by date + time, and generates missing ones.
  */
 export async function getPaymentClasses({ payment, groups, db }) {
   if (!payment || !payment.dateFrom || !Array.isArray(payment.groups)) return [];
@@ -44,42 +51,57 @@ export async function getPaymentClasses({ payment, groups, db }) {
   let validPast = [];
 
   // 1. Fetch all valid past classes for all groups
-    for (const groupId of payment.groups) {
+  for (const groupId of payment.groups) {
     const group = groups.find(g => g.id === groupId);
     if (!group) continue;
+
     const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
     for (const doc of pastSnap.docs) {
       const d = doc.data();
       if (d.canceled) continue;
       if (!d.date) continue;
+
       const classDate = parseDate(d.date);
       if (classDate < paymentStart) continue;
+
       validPast.push({
         date: d.date,
         groupId,
         groupName: group.name,
+        groupTime: group.time || group.schedule || '',
       });
     }
   }
 
-
-  // 2. Sort by date ascending
-  validPast.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+  // 2. Sort by date ascending, then by time ascending
+  validPast.sort((a, b) => {
+    const dateDiff = parseDate(a.date) - parseDate(b.date);
+    if (dateDiff !== 0) return dateDiff;
+    return parseTimeToMinutes(a.groupTime) - parseTimeToMinutes(b.groupTime);
+  });
 
   // 3. If enough, return first N
   if (validPast.length >= payment.type) return validPast.slice(0, payment.type);
 
   // 4. If not enough, fill with generated future classes
-  const classesNeeded = payment.type - validPast.length;
   const afterDatesSet = new Set(validPast.map(cls => `${cls.groupId}_${cls.date}`));
   let nextDates = [];
+
   const futureGenerators = payment.groups.map(groupId => {
     const group = groups.find(g => g.id === groupId);
     if (!group) return null;
+
     return {
       groupId,
       groupName: group.name,
-      gen: generateFutureDates(validPast.length == 0? paymentStart: new Date(), group.dayOfWeek, afterDatesSet, groupId, group.name),
+      gen: generateFutureDates(
+        validPast.length === 0 ? paymentStart : new Date(),
+        group.dayOfWeek,
+        afterDatesSet,
+        groupId,
+        group.name,
+        group.time || group.schedule || ''
+      ),
       lastDate: null
     };
   }).filter(Boolean);
@@ -94,18 +116,30 @@ export async function getPaymentClasses({ payment, groups, db }) {
   }
 
   while (validPast.length < payment.type && nextDates.length > 0) {
-    // Find the earliest date across all nextDates
     let nextIdx = 0;
+
     for (let i = 1; i < nextDates.length; i++) {
-      if (parseDate(nextDates[i].lastDate.date) < parseDate(nextDates[nextIdx].lastDate.date)) {
+      const current = nextDates[i].lastDate;
+      const best = nextDates[nextIdx].lastDate;
+
+      const currentDate = parseDate(current.date);
+      const bestDate = parseDate(best.date);
+
+      if (
+        currentDate < bestDate ||
+        (
+          currentDate.getTime() === bestDate.getTime() &&
+          parseTimeToMinutes(current.groupTime) < parseTimeToMinutes(best.groupTime)
+        )
+      ) {
         nextIdx = i;
       }
     }
+
     const chosen = nextDates[nextIdx].lastDate;
     validPast.push(chosen);
     afterDatesSet.add(`${chosen.groupId}_${chosen.date}`);
 
-    // Advance this generator to its next available date
     const next = nextDates[nextIdx].gen.next();
     if (!next.done) {
       nextDates[nextIdx].lastDate = next.value;
@@ -116,7 +150,6 @@ export async function getPaymentClasses({ payment, groups, db }) {
 
   return validPast.slice(0, payment.type);
 }
-
 /**
  * Returns an array of students (via payments) signed up for the given class (groupId+date).
  * - Iterates over ALL payments (not just student's lastPaymentId)

@@ -60,3 +60,119 @@ function App() {
 }
 
 export default App;
+
+// import React, { useState } from "react";
+// import { collection, getDocs } from "firebase/firestore";
+// import { db } from "./context/firebase";
+// import * as XLSX from "xlsx";
+
+// function normalizeValue(v) {
+//   if (v == null) return "";
+
+//   if (typeof v === "object" && typeof v.toDate === "function")
+//     return v.toDate().toISOString();
+
+//   if (Array.isArray(v)) return JSON.stringify(v);
+
+//   if (typeof v === "object") return JSON.stringify(v);
+
+//   return v;
+// }
+
+// function normalizeDoc(id, data) {
+//   const out = { id };
+//   for (const [k, v] of Object.entries(data || {})) {
+//     out[k] = normalizeValue(v);
+//   }
+//   return out;
+// }
+
+// async function fetchCollection(name) {
+//   const snap = await getDocs(collection(db, name));
+//   return snap.docs.map(d => normalizeDoc(d.id, d.data()));
+// }
+
+// function sheetFromJson(wb, sheetName, rows) {
+//   const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ empty: "" }]);
+//   XLSX.utils.book_append_sheet(wb, ws, sheetName);
+// }
+
+// export default function App() {
+//   const [status, setStatus] = useState("Idle");
+//   const [running, setRunning] = useState(false);
+
+//   const exportAll = async () => {
+//     if (running) return;
+
+//     setRunning(true);
+//     setStatus("Exporting...");
+
+//     try {
+//       const wb = XLSX.utils.book_new();
+
+//       const TOP_LEVEL = ["students", "payments", "groups", "users"];
+
+//       // 1️⃣ Top-level collections
+//       for (const col of TOP_LEVEL) {
+//         setStatus(`Reading ${col}...`);
+//         const rows = await fetchCollection(col);
+//         sheetFromJson(wb, col.slice(0, 31), rows);
+//       }
+
+//       // 2️⃣ groups/{groupId}/pastClasses
+//       setStatus("Reading groups/*/pastClasses...");
+//       const groupsRows = await fetchCollection("groups");
+//       const pastClassesRows = [];
+
+//       for (const g of groupsRows) {
+//         const groupId = g.id;
+//         const snap = await getDocs(
+//           collection(db, `groups/${groupId}/pastClasses`)
+//         );
+
+//         for (const d of snap.docs) {
+//           pastClassesRows.push({
+//             groupId,
+//             pastClassId: d.id,
+//             ...normalizeDoc(d.id, d.data()),
+//           });
+//         }
+//       }
+
+//       sheetFromJson(wb, "group_pastClasses", pastClassesRows);
+
+//       // 3️⃣ Download Excel
+//       setStatus("Writing Excel file...");
+//       XLSX.writeFile(
+//         wb,
+//         `firestore_export_${new Date().toISOString().slice(0, 10)}.xlsx`
+//       );
+
+//       setStatus("✅ Done! File downloaded.");
+//     } catch (e) {
+//       console.error(e);
+//       setStatus("❌ Export failed. Check console.");
+//     } finally {
+//       setRunning(false);
+//     }
+//   };
+
+//   return (
+//     <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+//       <h2>Firestore → Excel Export (one-time)</h2>
+//       <p>Status: <b>{status}</b></p>
+
+//       <button
+//         onClick={exportAll}
+//         disabled={running}
+//         style={{ padding: "10px 14px", fontSize: 16 }}
+//       >
+//         {running ? "Exporting..." : "Export to Excel"}
+//       </button>
+
+//       <p style={{ marginTop: 12, opacity: 0.8 }}>
+//         After exporting, restore your original App.js.
+//       </p>
+//     </div>
+//   );
+// }
