@@ -173,7 +173,7 @@ function GroupClassesPage() {
       <h2 className="group-title">{group?.name?.toUpperCase()}</h2>
       <p className="group-schedule">{group?.schedule || 'FRIDAY 20:00'}</p>
 
-      {user?.role === 'admin' && (
+      {(user?.role === 'admin' || user?.role === 'coach') && (
         <>
           <button className="students-button" onClick={() => navigate('/students')}>
             STUDENTS LIST
