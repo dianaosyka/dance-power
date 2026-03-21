@@ -209,7 +209,7 @@ function GroupClassDetailPage() {
     <div className="class-detail-page">
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
-      {(user?.role === 'admin' || user?.role === 'coach')(
+      {(user?.role === 'admin' || user?.role === 'coach') && (
         <button onClick={handleDeleteClass} style={{ backgroundColor: 'red', color: 'white' }}>
           🗑 DELETE CLASS
         </button>
