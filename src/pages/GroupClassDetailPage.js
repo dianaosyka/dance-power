@@ -122,7 +122,6 @@ function GroupClassDetailPage() {
         payments,
         groups,
         db,
-        absences,
         user,
       });
 
@@ -142,7 +141,7 @@ function GroupClassDetailPage() {
 
       console.log('Computed earnings:', { total, forCoachesLoc, earnedLoc });
     })();
-  }, [group, groupId, date, payments, students, absences, user, db, groups, rent, coachesThisClass]);
+  }, [group, groupId, date, payments, students, user, db, groups, rent, coachesThisClass]);
 
   const earnings = React.useMemo(() => {
     if (!signedUp || !Array.isArray(signedUp) || signedUp.length === 0) {
@@ -170,19 +169,34 @@ function GroupClassDetailPage() {
       ? current.filter(g => g !== groupId)
       : [...current, groupId];
 
-    const newAbsences = { ...absences };
+    const previousAbsences = absences;
+    const nextStudentAbsences = { ...(absences[studentId] || {}) };
+    const newAbsences = {
+      ...absences,
+      [studentId]: nextStudentAbsences,
+    };
     try {
       if (newGroups.length === 0) {
-        if (newAbsences[studentId]) delete newAbsences[studentId][date];
+        delete nextStudentAbsences[date];
+
+        if (Object.keys(nextStudentAbsences).length === 0) {
+          delete newAbsences[studentId];
+        }
+      } else {
+        nextStudentAbsences[date] = newGroups;
+      }
+
+      setAbsences(newAbsences);
+
+      if (newGroups.length === 0) {
         await setDoc(ref, { absences: { [date]: deleteField() } }, { merge: true });
       } else {
-        newAbsences[studentId] = {
-          ...newAbsences[studentId],
-          [date]: newGroups,
-        };
         await setDoc(ref, { absences: { [date]: newGroups } }, { merge: true });
       }
-      setAbsences(newAbsences);
+    } catch (err) {
+      console.error('Failed to toggle attendance:', err);
+      setAbsences(previousAbsences);
+      alert('❌ Failed to update attendance');
     } finally {
       setLoadingId(null);
     }
@@ -263,7 +277,8 @@ function GroupClassDetailPage() {
               const [dd, mm, yyyy] = date.split('.').map(Number);
               const classDate = new Date(yyyy, mm - 1, dd);
               const isFuture = classDate > today;
-              const icon = isFuture ? '🕒' : s.absent ? '❌' : '✅';
+              const isAbsent = !!absences?.[s.id]?.[date]?.includes(groupId);
+              const icon = isFuture ? '🕒' : isAbsent ? '❌' : '✅';
               const displayIcon = loadingAbsences ? '🔄' : (loadingId === s.id ? '🔄' : icon);
 
               return (

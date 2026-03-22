@@ -163,9 +163,8 @@ export async function getPaymentClasses({ payment, groups, db }) {
  * @param {Array}  params.payments        // [{id, studentId?, status, groups, amount, type, ...}]
  * @param {Array}  params.groups
  * @param {Object} params.db
- * @param {Object} params.absences        // (studentId: { [date]: [groupId, ...] })
  * @param {Object} params.user            // {role: 'coach' | ...}
- * @returns {Promise<Array<{id: string, name: string, amount: string, absent: boolean}>>}
+ * @returns {Promise<Array<{id: string, name: string, amount: string}>>}
  */
 export async function getClassSignedStudentsByPayments({
   groupId,
@@ -174,7 +173,6 @@ export async function getClassSignedStudentsByPayments({
   payments,
   groups,
   db,
-  absences,
   user,
 }) {
   const result = [];
@@ -214,14 +212,12 @@ export async function getClassSignedStudentsByPayments({
     );
     if (!coversClass) continue;
 
-    const isAbsent = !!absences?.[student.id]?.[date]?.includes(groupId);
     const amount = user?.role === 'coach' ? 1 : (payment.amount / payment.type);
 
     result.push({
       id: student.id,
       name: student.name,
       amount: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
-      absent: isAbsent,
     });
   }
 
