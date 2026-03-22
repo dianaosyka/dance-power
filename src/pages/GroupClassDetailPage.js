@@ -17,6 +17,10 @@ function GroupClassDetailPage() {
   const navigate = useNavigate();
   const { db, groups, payments, students, coaches } = useData();
   const { user } = useUser();
+  const classRef = React.useMemo(
+    () => doc(db, `groups/${groupId}/pastClasses`, date),
+    [db, groupId, date]
+  );
 
   const [group, setGroup] = useState(null);
   const [signedUp, setSignedUp] = useState(undefined);
@@ -26,6 +30,9 @@ function GroupClassDetailPage() {
   const [isCanceled, setIsCanceled] = useState(false);
   const [coachesThisClass, setCoaches] = useState(undefined);
   const [rent, setRent] = useState(null);
+  const [comment, setComment] = useState('');
+  const [savedComment, setSavedComment] = useState('');
+  const [savingComment, setSavingComment] = useState(false);
 
   useEffect(() => {
     setGroup(groups.find(g => g.id === groupId));
@@ -33,16 +40,18 @@ function GroupClassDetailPage() {
 
   useEffect(() => {
     const fetchClassStatus = async () => {
-      const ref = doc(db, `groups/${groupId}/pastClasses`, date);
-      const snap = await getDoc(ref);
+      const snap = await getDoc(classRef);
       const data = snap.exists() ? snap.data() : {};
       setIsCanceled(data?.canceled === true);
       setCoaches(data?.coach || []);
       setRent(data?.rent ?? 0);
+      const nextComment = typeof data?.comment === 'string' ? data.comment : '';
+      setComment(nextComment);
+      setSavedComment(nextComment);
       console.log('rent for class:', data?.rent ?? 0);
     };
     fetchClassStatus();
-  }, [groupId, date, db]);
+  }, [classRef]);
 
   useEffect(() => {
     const fetchAbsences = async () => {
@@ -202,6 +211,29 @@ function GroupClassDetailPage() {
     }
   };
 
+  const handleSaveComment = async () => {
+    if (savingComment || comment === savedComment) return;
+
+    setSavingComment(true);
+    try {
+      const nextComment = comment.trim();
+
+      if (nextComment) {
+        await setDoc(classRef, { comment: nextComment }, { merge: true });
+      } else {
+        await setDoc(classRef, { comment: deleteField() }, { merge: true });
+      }
+
+      setComment(nextComment);
+      setSavedComment(nextComment);
+    } catch (err) {
+      console.error('Failed to save comment:', err);
+      alert('❌ Failed to save comment');
+    } finally {
+      setSavingComment(false);
+    }
+  };
+
   const handleDeleteClass = async () => {
     if (!window.confirm(`Delete class ${date} from group ${group?.name}?`)) return;
     try {
@@ -297,6 +329,24 @@ function GroupClassDetailPage() {
               );
             })}
           </ul>
+          <div style={{ margin: '16px 0' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>COMMENT</div>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add comment for this class"
+              rows={3}
+              style={{ width: '100%', maxWidth: 520, padding: 8, resize: 'vertical' }}
+            />
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={handleSaveComment}
+                disabled={savingComment || comment === savedComment}
+              >
+                {savingComment ? 'Saving...' : 'Save Comment'}
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>);
