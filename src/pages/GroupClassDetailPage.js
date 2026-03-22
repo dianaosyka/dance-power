@@ -28,6 +28,7 @@ function GroupClassDetailPage() {
   const [loadingId, setLoadingId] = useState(null);
   const [loadingAbsences, setLoadingAbsences] = useState(true);
   const [isCanceled, setIsCanceled] = useState(false);
+  const [classExists, setClassExists] = useState(false);
   const [coachesThisClass, setCoaches] = useState(undefined);
   const [rent, setRent] = useState(null);
   const [comment, setComment] = useState('');
@@ -41,6 +42,7 @@ function GroupClassDetailPage() {
   useEffect(() => {
     const fetchClassStatus = async () => {
       const snap = await getDoc(classRef);
+      setClassExists(snap.exists());
       const data = snap.exists() ? snap.data() : {};
       setIsCanceled(data?.canceled === true);
       setCoaches(data?.coach || []);
@@ -212,7 +214,7 @@ function GroupClassDetailPage() {
   };
 
   const handleSaveComment = async () => {
-    if (savingComment || comment === savedComment) return;
+    if (!classExists || savingComment || comment === savedComment) return;
 
     setSavingComment(true);
     try {
@@ -255,7 +257,7 @@ function GroupClassDetailPage() {
     <div className="class-detail-page">
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
-      {(user?.role === 'admin' || user?.role === 'coach') && (
+      {classExists && (user?.role === 'admin' || user?.role === 'coach') && (
         <button onClick={handleDeleteClass} style={{ backgroundColor: 'red', color: 'white' }}>
           🗑 DELETE CLASS
         </button>
@@ -305,12 +307,8 @@ function GroupClassDetailPage() {
 
           <ul className="student-list">
             {signedUp?.map((s, i) => {
-              const today = new Date();
-              const [dd, mm, yyyy] = date.split('.').map(Number);
-              const classDate = new Date(yyyy, mm - 1, dd);
-              const isFuture = classDate > today;
               const isAbsent = !!absences?.[s.id]?.[date]?.includes(groupId);
-              const icon = isFuture ? '🕒' : isAbsent ? '❌' : '✅';
+              const icon = !classExists ? '🕒' : isAbsent ? '❌' : '✅';
               const displayIcon = loadingAbsences ? '🔄' : (loadingId === s.id ? '🔄' : icon);
 
               return (
@@ -320,8 +318,8 @@ function GroupClassDetailPage() {
                     <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
                   }
                   <span
-                    style={{ cursor: isFuture ? 'not-allowed' : 'pointer' }}
-                    onClick={() => !isFuture && toggleAttendance(s.id)}
+                    style={{ cursor: !classExists ? 'not-allowed' : 'pointer' }}
+                    onClick={() => classExists && toggleAttendance(s.id)}
                   >
                     {displayIcon}
                   </span>
@@ -329,24 +327,27 @@ function GroupClassDetailPage() {
               );
             })}
           </ul>
-          <div style={{ margin: '16px 0' }}>
-            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>COMMENT</div>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Add comment for this class"
-              rows={3}
-              style={{ width: '100%', maxWidth: 520, padding: 8, resize: 'vertical' }}
-            />
-            <div style={{ marginTop: 8 }}>
-              <button
-                onClick={handleSaveComment}
-                disabled={savingComment || comment === savedComment}
-              >
-                {savingComment ? 'Saving...' : 'Save Comment'}
-              </button>
+          {classExists && (
+            <div className="comment-box">
+              <div className="comment-label">COMMENT</div>
+              <textarea
+                className="comment-textarea"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Add comment for this class"
+                rows={4}
+              />
+              <div className="comment-actions">
+                <button
+                  className="comment-save-button"
+                  onClick={handleSaveComment}
+                  disabled={savingComment || comment === savedComment}
+                >
+                  {savingComment ? 'Saving...' : 'Save Comment'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>);

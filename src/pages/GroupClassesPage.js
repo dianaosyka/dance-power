@@ -29,6 +29,7 @@ function getNextFutureDates(startFrom, weekday, count) {
 }
 
 function parseDateStr(dateStr) {
+  if (!dateStr) return new Date(0);
   const [dd, mm, yyyy] = dateStr.split('.').map(Number);
   return new Date(yyyy, mm - 1, dd);
 }
@@ -65,7 +66,14 @@ function GroupClassesPage() {
     const fetchPastClasses = async () => {
       if (!groupId) return;
       const snap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const fetched = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          date: data?.date || d.id,
+        };
+      });
       fetched.sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
       setPastDates(fetched);
     };
