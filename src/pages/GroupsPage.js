@@ -14,7 +14,9 @@ function GroupsPage() {
     navigate('/login');
   };
 
-  const visibleGroups = groups;
+  const visibleGroups = [...groups].sort((b, a) =>
+    a.name.localeCompare(b.name)
+  );
 
   return (
     <div className="page">
@@ -39,6 +41,17 @@ function GroupsPage() {
           PAYMENT HISTORY
         </button>
 
+        {user?.role === 'admin' && (
+          <div className="add-button-container">
+            <button
+              className="add-button"
+              onClick={() => navigate('/add-payment')}
+            >
+              +
+            </button>
+          </div>
+        )}
+
         <ul className="group-list">
           {visibleGroups.map(group => (
             <li
@@ -52,16 +65,6 @@ function GroupsPage() {
           ))}
         </ul>
 
-        {user?.role === 'admin' && (
-          <div className="add-button-container">
-            <button
-              className="add-button"
-              onClick={() => navigate('/add-payment')}
-            >
-              +
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
