@@ -5,7 +5,9 @@ import {
   getDocs,
   doc,
   runTransaction,
-  Timestamp
+  Timestamp,
+  writeBatch,
+  arrayRemove,
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
@@ -56,6 +58,7 @@ function GroupClassesPage() {
   // guards
   const [isToggling, setIsToggling] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
 
   useEffect(() => {
     const g = groups.find(g => g.id === groupId);
@@ -176,6 +179,66 @@ function GroupClassesPage() {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    if (!groupId || !group || isDeletingGroup) return;
+
+    if (!window.confirm(`Delete group ${group.name}? This will also delete all past classes.`)) {
+      return;
+    }
+
+    const second = prompt(`Type DELETE to permanently remove ${group.name}.`);
+    if (second !== 'DELETE') {
+      alert('❌ Deletion canceled');
+      return;
+    }
+
+    setIsDeletingGroup(true);
+
+    try {
+      const pastClassesRef = collection(db, `groups/${groupId}/pastClasses`);
+      const [pastClassesSnap, studentsSnap, paymentsSnap] = await Promise.all([
+        getDocs(pastClassesRef),
+        getDocs(collection(db, 'students')),
+        getDocs(collection(db, 'payments')),
+      ]);
+
+      const batch = writeBatch(db);
+
+      pastClassesSnap.forEach((classDoc) => {
+        batch.delete(classDoc.ref);
+      });
+
+      studentsSnap.forEach((studentDoc) => {
+        const studentGroups = studentDoc.data()?.groups || [];
+        if (studentGroups.includes(groupId)) {
+          batch.update(studentDoc.ref, {
+            groups: arrayRemove(groupId),
+          });
+        }
+      });
+
+      paymentsSnap.forEach((paymentDoc) => {
+        const paymentGroups = paymentDoc.data()?.groups || [];
+        if (paymentGroups.includes(groupId)) {
+          batch.update(paymentDoc.ref, {
+            groups: arrayRemove(groupId),
+          });
+        }
+      });
+
+      batch.delete(doc(db, 'groups', groupId));
+      await batch.commit();
+
+      alert('✅ Group deleted');
+      navigate('/groups');
+    } catch (err) {
+      console.error('Error deleting group:', err);
+      alert('❌ Failed to delete group');
+    } finally {
+      setIsDeletingGroup(false);
+    }
+  };
+
   return (
     <div className="group-page">
       <h2 className="group-title">{group?.name?.toUpperCase()}</h2>
@@ -261,6 +324,15 @@ function GroupClassesPage() {
           </li>
         ))}
       </ul>
+      <br></br><br></br>
+      <button
+        className="delete-group-button"
+        onClick={handleDeleteGroup}
+        disabled={isDeletingGroup}
+        title={isDeletingGroup ? 'Deleting group…' : 'Delete group'}
+      >
+        {isDeletingGroup ? 'Deleting group…' : 'DELETE GROUP'}
+      </button>
 
       {showModal && (
         <div className="modal-overlay">
