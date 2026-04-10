@@ -11,14 +11,13 @@ function PaymentHistoryPage() {
   const getGroupNames = (ids) =>
     ids.map(id => groups.find(g => g.id === id)?.name || id).join(', ');
 
-  const parseDateStr = (str) => {
-    const [dd, mm, yyyy] = str.split('.');
-    return new Date(`${yyyy}-${mm}-${dd}`);
-  };
+  const getPaymentSortDate = (payment) =>
+    new Date((payment.timestamp?.seconds || 0) * 1000) ||
+    new Date(0);
 
   const sortedPayments = [...payments].sort((a, b) => {
-    const dateA = a.createdAt ? parseDateStr(a.createdAt) : new Date((a.timestamp?.seconds || 0) * 1000);
-    const dateB = b.createdAt ? parseDateStr(b.createdAt) : new Date((b.timestamp?.seconds || 0) * 1000);
+    const dateA = getPaymentSortDate(a);
+    const dateB = getPaymentSortDate(b);
     return dateB - dateA; // Newest first
   });
 

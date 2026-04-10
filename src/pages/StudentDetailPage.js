@@ -24,13 +24,13 @@ function StudentDetailPage() {
 
   const student = students.find(s => s.id === studentId);
 
+  const getPaymentSortDate = (payment) =>
+    new Date((payment.timestamp?.seconds || 0) * 1000) ||
+    new Date(0);
+
   const studentPayments = payments
     .filter(p => p.studentId === studentId)
-    .sort((a, b) => {
-      const [da, ma, ya] = (a.dateFrom || '01.01.1970').split('.');
-      const [dbb, mbb, ybb] = (b.dateFrom || '01.01.1970').split('.');
-      return new Date(`${ybb}-${mbb}-${dbb}`) - new Date(`${ya}-${ma}-${da}`);
-    });
+    .sort((a, b) => getPaymentSortDate(b) - getPaymentSortDate(a));
 
   const currentPayment =
     studentPayments.length > 0 ? studentPayments[currentIndex] : null;
