@@ -222,7 +222,7 @@ function AddPaymentPage() {
       <div className="form-row">
         <label>GROUPS:</label>
         <div className="group-box">
-          {groups.map(group => (
+          {[...groups].reverse().map(group => (
             <label key={group.id} className="group-checkbox">
               <input
                 type="checkbox"
