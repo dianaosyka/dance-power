@@ -44,6 +44,9 @@ function AddPaymentPage() {
   const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const sortedGroups = [...groups].sort((b, a) =>
+    a.name.localeCompare(b.name)
+  );
 
   const toggleGroup = (id) => {
     setSelectedGroups(prev =>
@@ -222,7 +225,7 @@ function AddPaymentPage() {
       <div className="form-row">
         <label>GROUPS:</label>
         <div className="group-box">
-          {[...groups].reverse().map(group => (
+          {sortedGroups.map(group => (
             <label key={group.id} className="group-checkbox">
               <input
                 type="checkbox"
