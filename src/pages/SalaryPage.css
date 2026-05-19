@@ -1,0 +1,165 @@
+.salary-page {
+  background-color: #4b0082;
+  color: white;
+  min-height: 100vh;
+  padding: 20px;
+  max-width: 400px;
+  margin: auto;
+}
+
+.salary-title {
+  font-size: 20px;
+  margin: 14px 0 20px;
+}
+
+.salary-back-button {
+  background: transparent;
+  color: #ddd;
+  border: 1px solid #9b59b6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.salary-controls {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.salary-label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #ddd;
+}
+
+.salary-month-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #9b59b6;
+  border-radius: 6px;
+  background: #2b0846;
+  color: white;
+  font-size: 14px;
+}
+
+.salary-calculate-button {
+  width: 100%;
+  background-color: #00006b;
+  color: white;
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.salary-calculate-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.salary-error {
+  color: #ffb4c8;
+  font-size: 13px;
+}
+
+.salary-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.salary-summary div {
+  border: 1px solid #9b59b6;
+  border-radius: 6px;
+  padding: 10px;
+  background: #2b0846;
+}
+
+.salary-summary span,
+.salary-lesson-row span {
+  display: block;
+  color: #ddd;
+  font-size: 12px;
+}
+
+.salary-summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.salary-heading {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+.salary-lessons-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.salary-lessons-header .salary-heading {
+  margin: 0;
+}
+
+.salary-small-button {
+  background-color: transparent;
+  color: #ddd;
+  border: 1px solid #9b59b6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.salary-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.salary-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #9b59b6;
+  font-size: 14px;
+}
+
+.salary-coach-lessons {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.salary-coach-name {
+  padding: 8px 0 4px;
+  color: #f4d9ff;
+  font-size: 13px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.salary-lesson-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #9b59b6;
+  font-size: 14px;
+}
+
+.salary-lesson-row > div:last-child {
+  min-width: 78px;
+  text-align: right;
+}

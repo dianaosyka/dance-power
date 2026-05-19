@@ -12,6 +12,7 @@ import StudentDetailPage from './pages/StudentDetailPage';
 import GroupClassDetailPage from './pages/GroupClassDetailPage';
 import LoginPage from './pages/LoginPage';
 import PaymentHistoryPage from './pages/PaymentHistoryPage';
+import SalaryPage from './pages/SalaryPage';
 
 
 function AppRoutes() {
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/student/:studentId" element={<StudentDetailPage />} />
       <Route path="/group/:groupId/class/:date" element={<GroupClassDetailPage />} />
       <Route path="/payment-history" element={<PaymentHistoryPage />} />
+      <Route path="/salary" element={<SalaryPage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

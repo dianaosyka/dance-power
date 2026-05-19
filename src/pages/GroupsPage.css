@@ -88,3 +88,19 @@
   align-items: center;
 }
 
+.hidden-toggle-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding-bottom: 16px;
+}
+
+.hidden-toggle-button {
+  background-color: transparent;
+  color: #ccc;
+  padding: 6px 10px;
+  border: 1px solid #9b59b6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}

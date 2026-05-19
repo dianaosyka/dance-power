@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
@@ -8,15 +8,16 @@ function GroupsPage() {
   const { groups } = useData();
   const { user, setUser } = useUser();
   const navigate = useNavigate();
+  const [showHiddenGroups, setShowHiddenGroups] = useState(false);
 
   const handleLogout = () => {
     setUser(null);
     navigate('/login');
   };
 
-  const visibleGroups = [...groups].sort((b, a) =>
-    a.name.localeCompare(b.name)
-  );
+  const visibleGroups = groups
+    .filter(group => showHiddenGroups || group.hidden !== true)
+    .sort((b, a) => a.name.localeCompare(b.name));
 
   return (
     <div className="page">
@@ -40,6 +41,14 @@ function GroupsPage() {
         >
           PAYMENT HISTORY
         </button>
+        {user?.role === 'admin' && (
+          <button
+            className="students-button"
+            onClick={() => navigate('/salary')}
+          >
+            SALARY
+          </button>
+        )}
 
         {user?.role === 'admin' && (
           <div className="add-button-container">
@@ -64,6 +73,17 @@ function GroupsPage() {
             </li>
           ))}
         </ul>
+
+        {user?.role === 'admin' && (
+          <div className="hidden-toggle-container">
+            <button
+              className="hidden-toggle-button"
+              onClick={() => setShowHiddenGroups(current => !current)}
+            >
+              {showHiddenGroups ? 'Hide hidden groups' : 'Show hidden groups'}
+            </button>
+          </div>
+        )}
 
       </div>
     </div>
