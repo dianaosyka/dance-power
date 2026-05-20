@@ -105,7 +105,7 @@ function SalaryPage() {
 
       const classRows = [];
       let grossTotal = 0;
-      let rentTotal = 0;
+      let rentTotal = 580;
       let coachesTotal = 0;
 
       for (const group of groups) {
