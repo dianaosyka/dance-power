@@ -44,9 +44,9 @@ function AddPaymentPage() {
   const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const sortedGroups = [...groups].sort((b, a) =>
-    a.name.localeCompare(b.name)
-  );
+  const sortedGroups = groups
+    .filter(group => group.hidden !== true)
+    .sort((b, a) => a.name.localeCompare(b.name));
 
   const toggleGroup = (id) => {
     setSelectedGroups(prev =>
