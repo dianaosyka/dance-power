@@ -321,28 +321,28 @@ function GroupClassDetailPage() {
               );
             })}
           </ul>
-          {classExists && (
-            <div className="comment-box">
-              <div className="comment-label">COMMENT</div>
-              <textarea
-                className="comment-textarea"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Add comment for this class"
-                rows={4}
-              />
-              <div className="comment-actions">
-                <button
-                  className="comment-save-button"
-                  onClick={handleSaveComment}
-                  disabled={savingComment || comment === savedComment}
-                >
-                  {savingComment ? 'Saving...' : 'Save Comment'}
-                </button>
-              </div>
-            </div>
-          )}
         </>
+      )}
+      {classExists && (
+        <div className="comment-box">
+          <div className="comment-label">COMMENT</div>
+          <textarea
+            className="comment-textarea"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add comment for this class"
+            rows={4}
+          />
+          <div className="comment-actions">
+            <button
+              className="comment-save-button"
+              onClick={handleSaveComment}
+              disabled={savingComment || comment === savedComment}
+            >
+              {savingComment ? 'Saving...' : 'Save Comment'}
+            </button>
+          </div>
+        </div>
       )}
     </div>);
 }
