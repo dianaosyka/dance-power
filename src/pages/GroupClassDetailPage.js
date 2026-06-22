@@ -111,12 +111,12 @@ function GroupClassDetailPage() {
   }
 
   useEffect(() => {
-    if (
-      !group ||
-      !payments?.length ||
-      !students?.length ||
-      coachesThisClass === undefined
-    ) return;
+    if (!group || coachesThisClass === undefined) return;
+
+    if (!payments?.length || !students?.length) {
+      setSignedUp([]);
+      return;
+    }
 
     (async () => {
       // get matched signups
@@ -246,6 +246,7 @@ function GroupClassDetailPage() {
     () => new Map((coaches || []).map(c => [c.id, c.name])),
     [coaches]
   );
+  const canEditComment = user?.role === 'admin' || user?.role === 'coach';
 
   return (
     <div className="class-detail-page">
@@ -329,19 +330,22 @@ function GroupClassDetailPage() {
           <textarea
             className="comment-textarea"
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Add comment for this class"
+            onChange={(e) => canEditComment && setComment(e.target.value)}
+            placeholder={canEditComment ? 'Add comment for this class' : 'No comment for this class'}
+            readOnly={!canEditComment}
             rows={4}
           />
-          <div className="comment-actions">
-            <button
-              className="comment-save-button"
-              onClick={handleSaveComment}
-              disabled={savingComment || comment === savedComment}
-            >
-              {savingComment ? 'Saving...' : 'Save Comment'}
-            </button>
-          </div>
+          {canEditComment && (
+            <div className="comment-actions">
+              <button
+                className="comment-save-button"
+                onClick={handleSaveComment}
+                disabled={savingComment || comment === savedComment}
+              >
+                {savingComment ? 'Saving...' : 'Save Comment'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>);
