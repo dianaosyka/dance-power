@@ -56,19 +56,13 @@ function GroupClassDetailPage() {
   }, [classRef]);
 
   useEffect(() => {
-    const fetchAbsences = async () => {
-      const result = {};
-      for (const s of students) {
-        const ref = doc(db, 'students', s.id);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data().absences || {} : {};
-        result[s.id] = data;
-      }
-      setAbsences(result);
-      setLoadingAbsences(false);
-    };
-    fetchAbsences();
-  }, [students, db]);
+    const result = {};
+    for (const s of students) {
+      result[s.id] = s.absences || {};
+    }
+    setAbsences(result);
+    setLoadingAbsences(false);
+  }, [students]);
 
   function computeEarnings({ matched, user, coachesThisClass, rent, group }) {
     // total earned from payments

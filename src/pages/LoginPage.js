@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
-import { getDoc, doc, collection, getDocs } from 'firebase/firestore';
+import { getDoc, doc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import './LoginPage.css';
 
@@ -33,11 +33,9 @@ function LoginPage() {
     try {
       const hashed = await hashPassword(password);
       const usersRef = collection(db, 'users');
-      const snapshot = await getDocs(usersRef);
-      const match = snapshot.docs.find(doc => {
-        const data = doc.data();
-        return data.email === email && data.password === hashed;
-      });
+      const usersQuery = query(usersRef, where('email', '==', email), limit(1));
+      const snapshot = await getDocs(usersQuery);
+      const match = snapshot.docs.find(doc => doc.data().password === hashed);
 
       if (!match) {
         alert('❌ Invalid credentials');

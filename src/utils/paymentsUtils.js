@@ -42,7 +42,22 @@ function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupN
  * Returns up to `payment.type` valid class dates (past and generated future) for all groups in this payment.
  * Skips canceled, sorts by date + time, and generates missing ones.
  */
-export async function getPaymentClasses({ payment, groups, db }) {
+async function getPastClassDocs({ groupId, db, pastClassesByGroup }) {
+  if (pastClassesByGroup?.has(groupId)) {
+    return pastClassesByGroup.get(groupId);
+  }
+
+  const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
+  const docs = pastSnap.docs.map(doc => ({
+    id: doc.id,
+    data: () => doc.data(),
+  }));
+
+  pastClassesByGroup?.set(groupId, docs);
+  return docs;
+}
+
+export async function getPaymentClasses({ payment, groups, db, pastClassesByGroup }) {
   if (!payment || !payment.dateFrom || !Array.isArray(payment.groups)) return [];
 
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
@@ -55,9 +70,9 @@ export async function getPaymentClasses({ payment, groups, db }) {
     const group = groups.find(g => g.id === groupId);
     if (!group) continue;
 
-    const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-    for (const doc of pastSnap.docs) {
-      const d = doc.data();
+    const pastClassDocs = await getPastClassDocs({ groupId, db, pastClassesByGroup });
+    for (const pastClassDoc of pastClassDocs) {
+      const d = pastClassDoc.data();
       if (d.canceled) continue;
       if (!d.date) continue;
 
@@ -164,6 +179,7 @@ export async function getPaymentClasses({ payment, groups, db }) {
  * @param {Array}  params.groups
  * @param {Object} params.db
  * @param {Object} params.user            // {role: 'coach' | ...}
+ * @param {Map}    params.pastClassesByGroup // optional groupId -> past class docs cache
  * @returns {Promise<Array<{id: string, name: string, amount: string}>>}
  */
 export async function getClassSignedStudentsByPayments({
@@ -174,8 +190,10 @@ export async function getClassSignedStudentsByPayments({
   groups,
   db,
   user,
+  pastClassesByGroup,
 }) {
   const result = [];
+  const classCache = pastClassesByGroup || new Map();
 
   // Quick lookup for students by id
   const studentsById = new Map(students.map(s => [s.id, s]));
@@ -206,7 +224,12 @@ export async function getClassSignedStudentsByPayments({
     if (!student) continue; // Can't attribute this payment to a student
 
     // Does this payment cover the class?
-    const paymentClasses = await getPaymentClasses({ payment, groups, db });
+    const paymentClasses = await getPaymentClasses({
+      payment,
+      groups,
+      db,
+      pastClassesByGroup: classCache,
+    });
     const coversClass = paymentClasses?.some(
       c => c.groupId === groupId && c.date === date
     );

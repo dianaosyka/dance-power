@@ -107,9 +107,17 @@ function SalaryPage() {
       let grossTotal = 0;
       let rentTotal = 580;
       let coachesTotal = 0;
+      const pastClassesByGroup = new Map();
 
       for (const group of groups) {
         const snap = await getDocs(collection(db, `groups/${group.id}/pastClasses`));
+        pastClassesByGroup.set(
+          group.id,
+          snap.docs.map(doc => ({
+            id: doc.id,
+            data: () => doc.data(),
+          }))
+        );
 
         for (const classDoc of snap.docs) {
           const classData = classDoc.data();
@@ -127,6 +135,7 @@ function SalaryPage() {
             groups,
             db,
             user: { role: 'admin' },
+            pastClassesByGroup,
           });
 
           const studentCount = signedUp.length;
