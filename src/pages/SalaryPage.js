@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { useData } from '../context/firebase';
@@ -9,6 +9,30 @@ import './SalaryPage.css';
 function getCurrentMonthValue() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getSavedMonthValue() {
+  return localStorage.getItem('salarySelectedMonth') || getCurrentMonthValue();
+}
+
+function getSalarySummaryStorageKey(user, monthValue) {
+  if (!user?.role || !monthValue) return null;
+
+  const userKey = user.role === 'coach' ? user.id : user.role;
+  return `salarySummary:${user.role}:${userKey}:${monthValue}`;
+}
+
+function getSavedSalarySummary(storageKey) {
+  if (!storageKey) return null;
+
+  try {
+    const savedSummary = localStorage.getItem(storageKey);
+    return savedSummary ? JSON.parse(savedSummary) : null;
+  } catch (err) {
+    console.error('Failed to load saved salary summary:', err);
+    localStorage.removeItem(storageKey);
+    return null;
+  }
 }
 
 function isClassInMonth(dateStr, monthValue) {
@@ -72,20 +96,41 @@ function SalaryPage() {
   const navigate = useNavigate();
   const { db, groups, payments, students, coaches } = useData();
   const { user } = useUser();
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue());
+  const isAdmin = user?.role === 'admin';
+  const isCoach = user?.role === 'coach';
+  const [selectedMonth, setSelectedMonth] = useState(getSavedMonthValue);
   const [isCalculating, setIsCalculating] = useState(false);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
+  const calculationInProgress = useRef(false);
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
     [coaches]
   );
+  const salarySummaryStorageKey = useMemo(
+    () => getSalarySummaryStorageKey(user, selectedMonth),
+    [user, selectedMonth]
+  );
 
-  const calculateSalary = async () => {
-    if (!selectedMonth || isCalculating) return;
+  useEffect(() => {
+    localStorage.setItem('salarySelectedMonth', selectedMonth);
+  }, [selectedMonth]);
 
+  useEffect(() => {
+    if (!salarySummaryStorageKey) {
+      setSummary(null);
+      return;
+    }
+
+    setSummary(getSavedSalarySummary(salarySummaryStorageKey));
+  }, [salarySummaryStorageKey]);
+
+  const calculateSalary = useCallback(async () => {
+    if (!selectedMonth || calculationInProgress.current) return;
+
+    calculationInProgress.current = true;
     setIsCalculating(true);
     setError('');
 
@@ -127,6 +172,13 @@ function SalaryPage() {
             continue;
           }
 
+          const rent = Number(classData?.rent || 0);
+          const coachIds = getCoachIdsForClass(classData, group);
+
+          if (isCoach && !coachIds.includes(user.id)) {
+            continue;
+          }
+
           const signedUp = await getClassSignedStudentsByPayments({
             groupId: group.id,
             date,
@@ -143,8 +195,6 @@ function SalaryPage() {
             (sum, student) => sum + Number.parseFloat(student?.amount || 0),
             0
           );
-          const rent = Number(classData?.rent || 0);
-          const coachIds = getCoachIdsForClass(classData, group);
           const classCoachesTotal = coachIds.length * studentCount;
           const classEarned = classGross - rent - classCoachesTotal;
 
@@ -171,8 +221,10 @@ function SalaryPage() {
 
           classRows.push({
             id: `${group.id}-${date}`,
+            groupId: group.id,
             groupName: group.name,
             date,
+            comment: typeof classData?.comment === 'string' ? classData.comment.trim() : '',
             gross: classGross,
             rent,
             coaches: classCoachesTotal,
@@ -188,34 +240,87 @@ function SalaryPage() {
       }
 
       const sortedClassRows = classRows.sort((a, b) => a.date.localeCompare(b.date));
+      const sortedCoachTotals = [...coachTotals.values()]
+        .filter(coach => coach.salary > 0 || coach.classes > 0)
+        .sort((a, b) => b.salary - a.salary);
+      const visibleCoachTotals = isCoach
+        ? sortedCoachTotals.filter(coach => coach.id === user.id)
+        : sortedCoachTotals;
+      const visibleLessonsByCoach = isCoach
+        ? buildLessonsByCoach(sortedClassRows).filter(coach => coach.id === user.id)
+        : buildLessonsByCoach(sortedClassRows);
+      const myCoachTotal = visibleCoachTotals[0] || {
+        id: user?.id,
+        name: coachNames.get(user?.id) || 'My salary',
+        salary: 0,
+        classes: 0,
+        students: 0,
+      };
 
-      setSummary({
+      const nextSummary = {
         grossTotal,
         rentTotal,
         coachesTotal,
         earnedTotal: grossTotal - rentTotal - coachesTotal,
-        coachTotals: [...coachTotals.values()]
-          .filter(coach => coach.salary > 0 || coach.classes > 0)
-          .sort((a, b) => b.salary - a.salary),
+        coachTotals: visibleCoachTotals,
+        myCoachTotal,
         classRows: sortedClassRows,
-        lessonsByCoach: buildLessonsByCoach(sortedClassRows),
-      });
+        lessonsByCoach: visibleLessonsByCoach,
+      };
+
+      setSummary(nextSummary);
+
+      if (salarySummaryStorageKey) {
+        localStorage.setItem(salarySummaryStorageKey, JSON.stringify(nextSummary));
+      }
     } catch (err) {
       console.error('Failed to calculate salary:', err);
       setError('Failed to calculate salary. Check console for details.');
     } finally {
+      calculationInProgress.current = false;
       setIsCalculating(false);
     }
-  };
+  }, [
+    coachNames,
+    coaches,
+    db,
+    groups,
+    isCoach,
+    payments,
+    salarySummaryStorageKey,
+    selectedMonth,
+    students,
+    user,
+  ]);
 
-  if (user?.role !== 'admin') {
+  useEffect(() => {
+    if (!selectedMonth || (!isAdmin && !isCoach)) return;
+    if (!groups.length || !students.length || !coaches.length) return;
+
+    const refreshTimer = setTimeout(() => {
+      calculateSalary();
+    }, 300);
+
+    return () => clearTimeout(refreshTimer);
+  }, [
+    calculateSalary,
+    coaches.length,
+    groups.length,
+    isAdmin,
+    isCoach,
+    payments,
+    selectedMonth,
+    students.length,
+  ]);
+
+  if (!isAdmin && !isCoach) {
     return (
       <div className="salary-page">
         <button className="salary-back-button" onClick={() => navigate('/groups')}>
           Back
         </button>
         <h2>Salary</h2>
-        <p>Only admins can see this page.</p>
+        <p>Only admins and coaches can see this page.</p>
       </div>
     );
   }
@@ -243,7 +348,7 @@ function SalaryPage() {
           onClick={calculateSalary}
           disabled={isCalculating}
         >
-          {isCalculating ? 'Calculating...' : 'Calculate'}
+          {isCalculating ? 'Refreshing...' : summary ? 'Refresh' : 'Calculate'}
         </button>
       </div>
 
@@ -251,29 +356,48 @@ function SalaryPage() {
 
       {summary && (
         <>
-          <div className="salary-summary">
-            <div>
-              <span>All earned</span>
-              <strong>{summary.earnedTotal.toFixed(2)}€</strong>
+          {isAdmin ? (
+            <div className="salary-summary">
+              <div>
+                <span>All earned</span>
+                <strong>{summary.earnedTotal.toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>Gross</span>
+                <strong>{summary.grossTotal.toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>For coaches</span>
+                <strong>{summary.coachesTotal.toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>Rent</span>
+                <strong>{summary.rentTotal.toFixed(2)}€</strong>
+              </div>
             </div>
-            <div>
-              <span>Gross</span>
-              <strong>{summary.grossTotal.toFixed(2)}€</strong>
+          ) : (
+            <div className="salary-summary">
+              <div>
+                <span>My salary</span>
+                <strong>{summary.myCoachTotal.salary.toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>My classes</span>
+                <strong>{summary.myCoachTotal.classes}</strong>
+              </div>
+              <div>
+                <span>Students taught</span>
+                <strong>{summary.myCoachTotal.students}</strong>
+              </div>
             </div>
-            <div>
-              <span>For coaches</span>
-              <strong>{summary.coachesTotal.toFixed(2)}€</strong>
-            </div>
-            <div>
-              <span>Rent</span>
-              <strong>{summary.rentTotal.toFixed(2)}€</strong>
-            </div>
-          </div>
+          )}
 
-          <h3 className="salary-heading">COACHES</h3>
+          <h3 className="salary-heading">{isAdmin ? 'COACHES' : 'MY SALARY'}</h3>
           <ul className="salary-list">
             {summary.coachTotals.length === 0 ? (
-              <li className="salary-row">No coach salary in this month.</li>
+              <li className="salary-row">
+                {isAdmin ? 'No coach salary in this month.' : 'No salary in this month.'}
+              </li>
             ) : (
               summary.coachTotals.map(coach => (
                 <li key={coach.id} className="salary-row">
@@ -303,15 +427,39 @@ function SalaryPage() {
                   <div className="salary-coach-name">{coach.name}</div>
                   <ul className="salary-list">
                     {coach.lessons.map(row => (
-                      <li key={`${coach.id}-${row.id}`} className="salary-lesson-row">
-                        <div>
-                          <strong>{row.date}</strong>
-                          <span>{row.groupName}</span>
+                      <li
+                        key={`${coach.id}-${row.id}`}
+                        className={`salary-lesson-row${row.comment ? ' has-urgent-comment' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => navigate(`/group/${row.groupId}/class/${row.date}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            navigate(`/group/${row.groupId}/class/${row.date}`);
+                          }
+                        }}
+                      >
+                        <div className="salary-lesson-main">
+                          <div>
+                            <strong>{row.date}</strong>
+                            <span>{row.groupName}</span>
+                          </div>
+                          <div>
+                            <span>{row.studentCount} people</span>
+                            {showLessonMoney && (
+                              <strong>
+                                {(isCoach ? row.studentCount : row.earned).toFixed(2)}€
+                              </strong>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <span>{row.studentCount} people</span>
-                          {showLessonMoney && <strong>{row.earned.toFixed(2)}€</strong>}
-                        </div>
+                        {row.comment && (
+                          <div className="salary-lesson-comment">
+                            <span className="salary-lesson-comment-label">Incomplete payment</span>
+                            <strong>{row.comment}</strong>
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

@@ -1,18 +1,20 @@
 const NOTIFICATION_EMAIL = 'diana.osyka@outlook.com';
 const SERVICE_ACCOUNT_PROPERTY = 'SERVICE_ACCOUNT_JSON';
+const FIELD_FULL_NAME = `Meno a priezvisko
+
+🇺🇦‼️ будь ласка, не використовуйте українські букви, напишіть латиницею`;
+const FIELD_EMAIL = 'Адрес электронной почты';
+const FIELD_PHONE = 'Telefónne číslo (+421 XXX XXX XXX)';
+const FIELD_INSTAGRAM = 'Instagram — náš hlavný komunikačný kanál, preto vyžadujeme: NickName v Instagram (@XXX)';
 
 function onFormSubmit(e) {
   const values = e?.namedValues || {};
 
   const submitted = {
-    fullName: getNamedValue(values, ['Full name', 'Name', 'Meno a priezvisko', 'Meno']),
-    phone: getNamedValue(values, ['Phone number', 'Phone', 'Tel', 'Telefón', 'Telefon', 'Tel. číslo', 'Telefónne číslo']),
-    instagram: getNamedValue(values, ['Instagram', 'IG', 'Instagram username']),
-    style: getNamedValue(values, ['Na ktorý štýl', 'Na ktory styl', 'Štýl', 'Styl', 'Style']),
-    trainingType: getNamedValue(values, ['Typ tréningu', 'Typ treningu']),
-    startFrom: getNamedValue(values, ['Od kedy chcete začať', 'Od kedy chcete zacat']),
-    email: getNamedValue(values, ['Adresa elektronickej pošty', 'Email', 'Адрес электронной почты']),
-    note: getNamedValue(values, ['Poznámka', 'Otázky', 'Poznamka', 'Otazky']),
+    fullName: getExactValue(values, FIELD_FULL_NAME),
+    phone: getExactValue(values, FIELD_PHONE),
+    instagram: getExactValue(values, FIELD_INSTAGRAM),
+    email: getExactValue(values, FIELD_EMAIL),
   };
 
   try {
@@ -37,7 +39,7 @@ function onFormSubmit(e) {
         '',
         `Name: ${student.name}`,
         `Phone: ${student.phone}`,
-        `Style: ${student.formStyle || '-'}`,
+        `Email: ${student.email || '-'}`,
         `Instagram: ${student.instagram || '-'}`,
         `Student ID: ${studentId}`,
       ].join('\n')
@@ -58,6 +60,11 @@ function onFormSubmit(e) {
       ].join('\n')
     );
   }
+}
+
+function getExactValue(values, fieldName) {
+  const value = values[fieldName];
+  return Array.isArray(value) ? String(value[0] || '').trim() : String(value || '').trim();
 }
 
 function getNamedValue(values, possibleNames) {
@@ -100,11 +107,7 @@ function buildStudent(submitted) {
     phone,
     groups: [],
     instagram: normalizeInstagram(submitted.instagram),
-    formStyle: submitted.style,
-    formTrainingType: submitted.trainingType,
-    formStartFrom: submitted.startFrom,
     email: submitted.email,
-    note: submitted.note,
     source: 'google-form',
   };
 }

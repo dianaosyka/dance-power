@@ -24,6 +24,38 @@ function StudentDetailPage() {
 
   const student = students.find(s => s.id === studentId);
 
+  const studentEmail = student?.email?.trim();
+  const studentInstagram = student?.instagram?.trim();
+  const instagramHandle = studentInstagram
+    ?.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .replace(/^@/, '')
+    .replace(/\/$/, '');
+  const instagramHref = instagramHandle
+    ? `https://www.instagram.com/${instagramHandle}`
+    : '';
+
+  const StudentContacts = () => {
+    if (!studentEmail && !studentInstagram) return null;
+
+    return (
+      <div className="student-contact-details">
+        {studentEmail && (
+          <p>
+            EMAIL: <a href={`mailto:${studentEmail}`}>{studentEmail}</a>
+          </p>
+        )}
+        {studentInstagram && (
+          <p>
+            INSTAGRAM:{' '}
+            <a href={instagramHref} target="_blank" rel="noreferrer">
+              @{instagramHandle}
+            </a>
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const getPaymentSortDate = (payment) =>
     new Date((payment.timestamp?.seconds || 0) * 1000) ||
     new Date(0);
@@ -148,6 +180,7 @@ function StudentDetailPage() {
         <div className="student-card">
           <p>{student.phone}</p>
           <h2>{student.name.toUpperCase()}</h2>
+          <StudentContacts />
           <h3>No payments.</h3>
           <button onClick={handleAddPayment}>➕ ADD PAYMENT</button>
         </div>
@@ -176,6 +209,7 @@ function StudentDetailPage() {
         {(user?.role === 'admin' || user?.role === 'coach') && <p>{student.id}</p>}
 
         <h2>{student.name.toUpperCase()}</h2>
+        <StudentContacts />
         {currentPayment?.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
         <p>START DATE: {currentPayment.dateFrom}</p>
         <h1 className="price">{currentPayment.amount}€</h1>

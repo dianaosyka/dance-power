@@ -41,7 +41,7 @@ function GroupsPage() {
         >
           PAYMENT HISTORY
         </button>
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'coach') && (
           <button
             className="students-button"
             onClick={() => navigate('/salary')}

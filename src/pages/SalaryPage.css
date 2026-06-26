@@ -151,15 +151,59 @@
 }
 
 .salary-lesson-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: block;
   padding: 10px 0;
   border-bottom: 1px solid #9b59b6;
   font-size: 14px;
+  cursor: pointer;
 }
 
-.salary-lesson-row > div:last-child {
+.salary-lesson-row:hover,
+.salary-lesson-row:focus {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.salary-lesson-row.has-urgent-comment {
+  margin: 10px 0;
+  padding: 12px;
+  border: 2px solid #ff3b30;
+  border-radius: 6px;
+  background: #4a0714;
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2);
+}
+
+.salary-lesson-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.salary-lesson-main > div:last-child {
   min-width: 78px;
   text-align: right;
+}
+
+.salary-lesson-comment {
+  margin-top: 12px;
+  padding: 10px;
+  border-left: 5px solid #ffea00;
+  background: #ff3b30;
+  color: #fff;
+  line-height: 1.35;
+}
+
+.salary-lesson-comment-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #fff7a8;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.salary-lesson-comment strong {
+  display: block;
+  font-size: 15px;
 }
