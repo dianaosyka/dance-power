@@ -37,6 +37,7 @@ function AddPaymentPage() {
   const [type, setType] = useState('');
   const [discount, setDiscount] = useState('0');
   const [startDate, setStartDate] = useState(getTodayDate());
+  const [startTime, setStartTime] = useState('');
   const [paidDate, setPaidDate] = useState(getTodayDate());
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false); // <-- prevent double-clicks
@@ -110,6 +111,7 @@ function AddPaymentPage() {
         discount: discountNum,
         groups: selectedGroups,
         dateFrom: formatDate(startDate),
+        ...(startTime ? { timeFrom: startTime } : {}),
         createdAt: formatDate(paidDate),
         timestamp: Timestamp.now(),
         status: 'active',
@@ -131,6 +133,7 @@ function AddPaymentPage() {
       setType('');
       setDiscount('0');
       setStartDate(getTodayDate());
+      setStartTime('');
       setPaidDate(getTodayDate());
       setSelectedGroups([]);
 
@@ -203,6 +206,16 @@ function AddPaymentPage() {
           className="input"
           value={startDate}
           onChange={e => setStartDate(e.target.value)}
+        />
+      </div>
+
+      <div className="form-row">
+        <label>TIME FROM (OPTIONAL):</label>
+        <input
+          type="time"
+          className="input"
+          value={startTime}
+          onChange={e => setStartTime(e.target.value)}
         />
       </div>
 

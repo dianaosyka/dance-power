@@ -211,7 +211,10 @@ function StudentDetailPage() {
         <h2>{student.name.toUpperCase()}</h2>
         <StudentContacts />
         {currentPayment?.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
-        <p>START DATE: {currentPayment.dateFrom}</p>
+        <p>
+          START DATE: {currentPayment.dateFrom}
+          {currentPayment.timeFrom ? ` ${currentPayment.timeFrom}` : ''}
+        </p>
         <h1 className="price">{currentPayment.amount}€</h1>
 
         <div className="group-list">
@@ -240,7 +243,19 @@ function StudentDetailPage() {
             <tbody>
               {classes.length > 0 ? (
                 classes.map((c, index) => (
-                  <tr key={`${c.groupId}-${c.date}-${index}`}>
+                  <tr
+                    key={`${c.groupId}-${c.date}-${index}`}
+                    className="payment-class-row"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => navigate(`/group/${c.groupId}/class/${c.date}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/group/${c.groupId}/class/${c.date}`);
+                      }
+                    }}
+                  >
                     <td>{index + 1}</td>
                     <td>{c.date}</td>
                     <td>{c.groupName}</td>

@@ -41,7 +41,7 @@ function PaymentHistoryPage() {
               <div><b>Student:</b> {getStudentName(p.studentId)}</div>
               <div><b>Classes:</b> {p.type}</div>
               <div><b>Groups:</b> {getGroupNames(p.groups)}</div>
-              <div><b>Date from:</b> {p.dateFrom}</div>
+              <div><b>Date from:</b> {p.dateFrom}{p.timeFrom ? ` ${p.timeFrom}` : ''}</div>
               <div><b>Discount:</b> {p.discount}%</div>
               <div><b>Timestamp:</b> {formatTimestamp(p.timestamp)}</div>
             </div>

@@ -8,8 +8,9 @@ function parseDate(dateStr) {
 
 function parseTimeToMinutes(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return 23 * 60 + 59;
-  const [hh, mm] = timeStr.split(':').map(Number);
-  return (hh || 0) * 60 + (mm || 0);
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 23 * 60 + 59;
+  return Number(match[1]) * 60 + Number(match[2]);
 }
 
 function formatDate(date) {
@@ -20,12 +21,26 @@ function formatDate(date) {
   );
 }
 
-function* generateFutureDates(startFrom, weekday, afterDatesSet, groupId, groupName, groupTime) {
+function* generateFutureDates(
+  startFrom,
+  weekday,
+  afterDatesSet,
+  groupId,
+  groupName,
+  groupTime,
+  startTime,
+  startBoundaryDate
+) {
   const date = new Date(startFrom);
   while (true) {
     if (date.getDay() === weekday) {
       const dStr = formatDate(date);
-      if (!afterDatesSet.has(`${groupId}_${dStr}`)) {
+      const isBeforeStartTime =
+        startTime &&
+        formatDate(date) === formatDate(startBoundaryDate) &&
+        parseTimeToMinutes(groupTime) < parseTimeToMinutes(startTime);
+
+      if (!isBeforeStartTime && !afterDatesSet.has(`${groupId}_${dStr}`)) {
         yield {
           date: dStr,
           groupId,
@@ -62,6 +77,7 @@ export async function getPaymentClasses({ payment, groups, db, pastClassesByGrou
 
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
   const paymentStart = new Date(yyyy, mm - 1, dd);
+  const paymentStartTime = payment.timeFrom || '';
 
   let validPast = [];
 
@@ -79,11 +95,18 @@ export async function getPaymentClasses({ payment, groups, db, pastClassesByGrou
       const classDate = parseDate(d.date);
       if (classDate < paymentStart) continue;
 
+      const groupTime = group.time || group.schedule || '';
+      if (
+        paymentStartTime &&
+        classDate.getTime() === paymentStart.getTime() &&
+        parseTimeToMinutes(groupTime) < parseTimeToMinutes(paymentStartTime)
+      ) continue;
+
       validPast.push({
         date: d.date,
         groupId,
         groupName: group.name,
-        groupTime: group.time || group.schedule || '',
+        groupTime,
       });
     }
   }
@@ -115,7 +138,9 @@ export async function getPaymentClasses({ payment, groups, db, pastClassesByGrou
         afterDatesSet,
         groupId,
         group.name,
-        group.time || group.schedule || ''
+        group.time || group.schedule || '',
+        paymentStartTime,
+        paymentStart
       ),
       lastDate: null
     };
