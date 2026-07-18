@@ -14,6 +14,51 @@
   color: #ffe7fd;
 }
 
+.history-sort {
+  margin-bottom: 16px;
+  color: #ffe7fd;
+}
+
+.history-sort-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.history-sort-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.history-sort-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 231, 253, 0.14);
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.history-sort-tab.active {
+  background: rgba(87, 0, 44, 0.38);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.history-sort-tab:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: -2px;
+}
+
 .transaction-list {
   list-style: none;
   padding: 0;
