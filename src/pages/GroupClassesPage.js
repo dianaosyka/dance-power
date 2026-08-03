@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
@@ -36,6 +36,41 @@ function parseDateStr(dateStr) {
   return new Date(yyyy, mm - 1, dd);
 }
 
+const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
+
+function isAttendanceComplete(classItem) {
+  if (classItem.attendanceCompleted === true) return true;
+  if (classItem.attendanceCompleted === false) return false;
+  return parseDateStr(classItem.date) < ATTENDANCE_TRACKING_START;
+}
+
+function formatDate(date) {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dd}.${mm}.${date.getFullYear()}`;
+}
+
+function toDateInputValue(dateStr) {
+  const [dd, mm, yyyy] = dateStr.split('.');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Only inspect a short recent window. This catches forgotten lessons without
+// making old data from before the app was introduced appear as unfinished.
+function getRecentExpectedDates(weekday, count = 4) {
+  const result = [];
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  cursor.setDate(cursor.getDate() - 1);
+
+  while (result.length < count) {
+    if (cursor.getDay() === weekday) result.push(formatDate(cursor));
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return result;
+}
+
 function GroupClassesPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
@@ -59,6 +94,23 @@ function GroupClassesPage() {
   const [isToggling, setIsToggling] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+
+  const warnings = useMemo(() => {
+    if (!group) return [];
+
+    const classByDate = new Map(pastDates.map(item => [item.date, item]));
+    return getRecentExpectedDates(group.dayOfWeek ?? 5).flatMap(date => {
+      const classItem = classByDate.get(date);
+
+      if (!classItem) {
+        return [{ type: 'missing', date, message: 'Class was not added' }];
+      }
+      if (!classItem.canceled && !isAttendanceComplete(classItem)) {
+        return [{ type: 'attendance', date, message: 'Attendance is not completed' }];
+      }
+      return [];
+    });
+  }, [group, pastDates]);
 
   useEffect(() => {
     const g = groups.find(g => g.id === groupId);
@@ -159,6 +211,7 @@ function GroupClassesPage() {
           coach: [newCoach],
           rent: Number(newRent),
           canceled: Boolean(newCanceled),
+          attendanceCompleted: false,
           timestamp: Timestamp.now(),
         });
       });
@@ -177,6 +230,11 @@ function GroupClassesPage() {
     } finally {
       setIsAdding(false);
     }
+  };
+
+  const openAddClassForm = (date = '') => {
+    setNewDate(date ? toDateInputValue(date) : '');
+    setShowAddForm(true);
   };
 
   const handleDeleteGroup = async () => {
@@ -251,7 +309,7 @@ function GroupClassesPage() {
           </button>
           <button
             className="add-cancel-button"
-            onClick={() => setShowAddForm(true)}
+            onClick={() => openAddClassForm()}
             style={{ backgroundColor: 'green', color: 'white', marginBottom: 10 }}
           >
             ➕ ADD CLASS
@@ -262,6 +320,38 @@ function GroupClassesPage() {
       <button className="add-cancel-button" onClick={toggleFutureDates}>
         {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
       </button>
+
+      {warnings.length > 0 && (user?.role === 'admin' || user?.role === 'coach') && (
+        <section className="class-warnings" aria-label="Class warnings">
+          <h3>⚠️ ACTION NEEDED</h3>
+          <ul>
+            {warnings.map(warning => (
+              <li
+                key={`${warning.type}-${warning.date}`}
+                className={`class-warning class-warning--${warning.type}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (warning.type === 'missing') {
+                      openAddClassForm(warning.date);
+                    } else {
+                      navigate(`/group/${groupId}/class/${warning.date}`);
+                    }
+                  }}
+                >
+                  <span className="class-warning-date">{warning.date}</span>
+                  <span className="class-warning-message">
+                    <span aria-hidden="true">{warning.type === 'missing' ? '🚫' : '⚠️'}</span>
+                    {warning.message}
+                  </span>
+                  <span aria-hidden="true">➔</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {showFuture && (
         <>
@@ -310,7 +400,7 @@ function GroupClassesPage() {
               title={isToggling ? 'Working…' : (past.canceled ? 'Uncancel' : 'Cancel')}
               style={{ opacity: isToggling ? 0.6 : 1, pointerEvents: isToggling ? 'none' : 'auto' }}
             >
-              {past.canceled ? '❌' : '✅'}
+              {past.canceled ? '❌' : isAttendanceComplete(past) ? '✅' : '⚠️'}
             </span>
             <span
               className="arrow"

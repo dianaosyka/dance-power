@@ -6,11 +6,19 @@ import {
   setDoc,
   deleteDoc,
   deleteField,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import './GroupClassDetailPage.css';
+
+const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
+
+function isBeforeAttendanceTracking(dateStr) {
+  const [dd, mm, yyyy] = String(dateStr || '').split('.').map(Number);
+  return new Date(yyyy, mm - 1, dd) < ATTENDANCE_TRACKING_START;
+}
 
 function GroupClassDetailPage() {
   const { groupId, date } = useParams();
@@ -34,6 +42,8 @@ function GroupClassDetailPage() {
   const [comment, setComment] = useState('');
   const [savedComment, setSavedComment] = useState('');
   const [savingComment, setSavingComment] = useState(false);
+  const [attendanceCompleted, setAttendanceCompleted] = useState(false);
+  const [savingAttendanceStatus, setSavingAttendanceStatus] = useState(false);
 
   useEffect(() => {
     setGroup(groups.find(g => g.id === groupId));
@@ -47,13 +57,18 @@ function GroupClassDetailPage() {
       setIsCanceled(data?.canceled === true);
       setCoaches(data?.coach || []);
       setRent(data?.rent ?? 0);
+      const hasAttendanceStatus = typeof data?.attendanceCompleted === 'boolean';
+      setAttendanceCompleted(
+        data?.attendanceCompleted === true ||
+        (!hasAttendanceStatus && data?.canceled !== true && isBeforeAttendanceTracking(date))
+      );
       const nextComment = typeof data?.comment === 'string' ? data.comment : '';
       setComment(nextComment);
       setSavedComment(nextComment);
       console.log('rent for class:', data?.rent ?? 0);
     };
     fetchClassStatus();
-  }, [classRef]);
+  }, [classRef, date]);
 
   useEffect(() => {
     const result = {};
@@ -230,6 +245,38 @@ function GroupClassDetailPage() {
     }
   };
 
+  const handleToggleAttendanceCompleted = async () => {
+    if (!classExists || savingAttendanceStatus || savingComment) return;
+
+    const nextCompleted = !attendanceCompleted;
+    const nextComment = comment.trim();
+    const commentChanged = comment !== savedComment;
+    setSavingAttendanceStatus(true);
+    try {
+      const update = {
+        attendanceCompleted: nextCompleted,
+        attendanceCompletedAt: nextCompleted ? serverTimestamp() : deleteField(),
+      };
+
+      // Save an edited comment in the same write as the attendance status.
+      if (commentChanged) {
+        update.comment = nextComment || deleteField();
+      }
+
+      await setDoc(classRef, update, { merge: true });
+      setAttendanceCompleted(nextCompleted);
+      if (commentChanged) {
+        setComment(nextComment);
+        setSavedComment(nextComment);
+      }
+    } catch (err) {
+      console.error('Failed to update attendance status:', err);
+      alert('❌ Failed to update attendance status');
+    } finally {
+      setSavingAttendanceStatus(false);
+    }
+  };
+
   const handleDeleteClass = async () => {
     if (!window.confirm(`Delete class ${date} from group ${group?.name}?`)) return;
     try {
@@ -252,17 +299,15 @@ function GroupClassDetailPage() {
     <div className="class-detail-page">
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
-      {classExists && (user?.role === 'admin' || user?.role === 'coach') && (
-        <button onClick={handleDeleteClass} style={{ backgroundColor: 'red', color: 'white' }}>
-          🗑 DELETE CLASS
-        </button>
-      )}
       {signedUp?.length === 0
         ? (isCanceled
             ? (<h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>)
             : (<h3 style={{ color: 'red' }}>🚫 NO PEOPLE</h3>)
           ) : (
         <>
+        {classExists && !isCanceled && !attendanceCompleted && (
+        <p className="attendance-warning">⚠️ Attendance has not been marked complete.</p>
+      )}
           <div className="classes-header">
             COACHES:
             {coachesThisClass?.length ? (
@@ -326,12 +371,12 @@ function GroupClassDetailPage() {
       )}
       {classExists && (
         <div className="comment-box">
-          <div className="comment-label">COMMENT</div>
+          <div className="comment-label">STUDENTS THAT CAME BUT ARE NOT IN THE LIST</div>
           <textarea
             className="comment-textarea"
             value={comment}
             onChange={(e) => canEditComment && setComment(e.target.value)}
-            placeholder={canEditComment ? 'Add comment for this class' : 'No comment for this class'}
+            placeholder={canEditComment ? 'Write student names' : 'No additional students'}
             readOnly={!canEditComment}
             rows={4}
           />
@@ -347,6 +392,26 @@ function GroupClassDetailPage() {
             </div>
           )}
         </div>
+      )}
+      {classExists && canEditComment && !isCanceled && (
+        <div className="class-status-actions">
+          <button
+            className={attendanceCompleted ? 'attendance-reopen-button' : 'attendance-complete-button'}
+            onClick={handleToggleAttendanceCompleted}
+            disabled={savingAttendanceStatus || savingComment}
+          >
+            {savingAttendanceStatus
+              ? 'Saving…'
+              : attendanceCompleted
+                ? '↩ REOPEN ATTENDANCE'
+                : '✓ MARK ATTENDANCE COMPLETE'}
+          </button>
+        </div>
+      )}
+      {classExists && canEditComment && (
+        <button className="delete-class-button" onClick={handleDeleteClass}>
+          🗑 DELETE CLASS
+        </button>
       )}
     </div>);
 }
