@@ -7,7 +7,7 @@ import './GroupsPage.css';
 
 function GroupsPage() {
   const { groups } = useData();
-  const { user, setUser } = useUser();
+  const { user, accountUser, setUser, viewAsCoach, setViewAsCoach } = useUser();
   const navigate = useNavigate();
   const [showHiddenGroups, setShowHiddenGroups] = useState(false);
 
@@ -86,6 +86,18 @@ function GroupsPage() {
               {showHiddenGroups ? 'Hide hidden groups' : 'Show hidden groups'}
             </button>
           </div>
+        )}
+
+        {accountUser?.role === 'admin' && (
+          <label className="view-mode-switch">
+            <span>Coach view</span>
+            <input
+              type="checkbox"
+              checked={viewAsCoach}
+              onChange={(event) => setViewAsCoach(event.target.checked)}
+            />
+            <span className="view-mode-slider" aria-hidden="true" />
+          </label>
         )}
 
       </div>

@@ -11,6 +11,7 @@ import {
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
+import { getCoachPayForClass } from '../utils/coachSalaryUtils';
 import './GroupClassDetailPage.css';
 
 const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
@@ -79,7 +80,7 @@ function GroupClassDetailPage() {
     setLoadingAbsences(false);
   }, [students]);
 
-  function computeEarnings({ matched, user, coachesThisClass, rent, group }) {
+  function computeEarnings({ matched, user, coachesThisClass, rent, group, date }) {
     // total earned from payments
     const total = matched.reduce(
       (sum, s) => sum + Number.parseFloat(s?.amount ?? 0),
@@ -89,6 +90,7 @@ function GroupClassDetailPage() {
     // defaults
     let forCoachesLoc = 0;
     let earnedLoc = 0;
+    const coachPay = getCoachPayForClass(group, date, matched.length);
 
     // ADMIN logic
     if (user?.role === "admin") {
@@ -96,9 +98,9 @@ function GroupClassDetailPage() {
       const coachCount = coachesThisClass?.length ?? 0;
 
       if (includesCoach) {
-        forCoachesLoc = (coachCount - 1) * matched.length;
+        forCoachesLoc = (coachCount - 1) * coachPay;
       } else {
-        forCoachesLoc = coachCount * matched.length;
+        forCoachesLoc = coachCount * coachPay;
       }
 
       // use purely local totals, not state
@@ -112,7 +114,7 @@ function GroupClassDetailPage() {
         (coachesThisClass?.length ?? 0) === 0 && user?.id === group?.coach;
 
       if (isInThisClass || isGroupCoachAndNoCoachesListed) {
-        earnedLoc = matched.length * 1;
+        earnedLoc = coachPay;
       } else {
         earnedLoc = 0;
       }
@@ -157,6 +159,7 @@ function GroupClassDetailPage() {
         coachesThisClass,
         rent,
         group,
+        date,
       });
 
       console.log('Computed earnings:', { total, forCoachesLoc, earnedLoc });
@@ -173,8 +176,9 @@ function GroupClassDetailPage() {
       coachesThisClass,
       rent,
       group,
+      date,
     });
-  }, [signedUp, user, coachesThisClass, rent, group]);
+  }, [signedUp, user, coachesThisClass, rent, group, date]);
 
   const toggleAttendance = async (studentId) => {
     const student = students.find(s => s.id === studentId);

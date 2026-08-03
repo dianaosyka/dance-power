@@ -226,3 +226,58 @@
 .main-warning-icon {
   font-size: 19px;
 }
+
+.view-mode-switch {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  width: max-content;
+  margin: 34px 0 8px auto;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.view-mode-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.view-mode-slider {
+  position: relative;
+  width: 25px;
+  height: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  transition: background-color 0.2s ease;
+}
+
+.view-mode-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  transition: transform 0.2s ease;
+}
+
+.view-mode-switch input:checked + .view-mode-slider {
+  background: rgba(123, 44, 191, 0.45);
+}
+
+.view-mode-switch input:checked + .view-mode-slider::after {
+  transform: translateX(11px);
+}
+
+.view-mode-switch input:focus-visible + .view-mode-slider {
+  outline: 1px solid white;
+  outline-offset: 2px;
+}

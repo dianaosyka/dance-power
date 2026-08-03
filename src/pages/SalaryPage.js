@@ -4,6 +4,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
+import { getCoachPayForClass, getCoachRatePerPerson } from '../utils/coachSalaryUtils';
 import './SalaryPage.css';
 
 function getCurrentMonthValue() {
@@ -191,11 +192,13 @@ function SalaryPage() {
           });
 
           const studentCount = signedUp.length;
+          const coachRate = getCoachRatePerPerson(group, date, studentCount);
+          const coachPay = getCoachPayForClass(group, date, studentCount);
           const classGross = signedUp.reduce(
             (sum, student) => sum + Number.parseFloat(student?.amount || 0),
             0
           );
-          const classCoachesTotal = coachIds.length * studentCount;
+          const classCoachesTotal = coachIds.length * coachPay;
           const classEarned = classGross - rent - classCoachesTotal;
 
           grossTotal += classGross;
@@ -213,7 +216,7 @@ function SalaryPage() {
 
             coachTotals.set(coachId, {
               ...existing,
-              salary: existing.salary + studentCount,
+              salary: existing.salary + coachPay,
               classes: existing.classes + 1,
               students: existing.students + studentCount,
             });
@@ -230,6 +233,8 @@ function SalaryPage() {
             coaches: classCoachesTotal,
             earned: classEarned,
             studentCount,
+            coachRate,
+            coachPay,
             coachIds,
             coachNames: coachIds.map(coachId => coachNames.get(coachId) || coachId),
             coachNamesById: Object.fromEntries(
@@ -449,7 +454,7 @@ function SalaryPage() {
                             <span>{row.studentCount} people</span>
                             {showLessonMoney && (
                               <strong>
-                                {(isCoach ? row.studentCount : row.earned).toFixed(2)}€
+                                {Number(isCoach ? (row.coachPay ?? row.studentCount) : row.earned).toFixed(2)}€
                               </strong>
                             )}
                           </div>
