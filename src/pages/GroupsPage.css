@@ -104,3 +104,125 @@
   cursor: pointer;
   font-size: 12px;
 }
+
+.warnings-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(185, 20, 48, 0.28);
+  color: #ffc2cb;
+}
+
+.warnings-error button {
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.main-warnings {
+  margin-bottom: 18px;
+}
+
+.warnings-summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid rgba(255, 202, 88, 0.7);
+  border-radius: 9px;
+  background: rgba(255, 179, 0, 0.17);
+  color: white;
+  text-align: left;
+  cursor: pointer;
+}
+
+.warnings-summary strong,
+.warnings-summary small {
+  display: block;
+}
+
+.warnings-summary small {
+  margin-top: 3px;
+  color: #ffe4a3;
+}
+
+.warnings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 8px;
+}
+
+.warnings-heading > span {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.warnings-heading button {
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+}
+
+.main-warnings ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.main-warning {
+  margin-bottom: 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.main-warning--missing {
+  border-color: rgba(255, 125, 145, 0.55);
+  background: rgba(185, 20, 48, 0.28);
+}
+
+.main-warning--attendance {
+  border-color: rgba(255, 202, 88, 0.5);
+  background: rgba(255, 179, 0, 0.12);
+}
+
+.main-warning button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main-warning strong,
+.main-warning small {
+  display: block;
+}
+
+.main-warning small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.main-warning-icon {
+  font-size: 19px;
+}

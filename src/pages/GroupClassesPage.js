@@ -79,6 +79,7 @@ function GroupClassesPage() {
 
   const [group, setGroup] = useState(null);
   const [pastDates, setPastDates] = useState([]);
+  const [pastClassesLoaded, setPastClassesLoaded] = useState(false);
   const [futureDates, setFutureDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -96,21 +97,34 @@ function GroupClassesPage() {
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
 
   const warnings = useMemo(() => {
-    if (!group) return [];
+    if (!group || !pastClassesLoaded) return [];
 
     const classByDate = new Map(pastDates.map(item => [item.date, item]));
-    return getRecentExpectedDates(group.dayOfWeek ?? 5).flatMap(date => {
+    const missingWarnings = getRecentExpectedDates(group.dayOfWeek ?? 5).flatMap(date => {
       const classItem = classByDate.get(date);
 
       if (!classItem) {
         return [{ type: 'missing', date, message: 'Class was not added' }];
       }
-      if (!classItem.canceled && !isAttendanceComplete(classItem)) {
-        return [{ type: 'attendance', date, message: 'Attendance is not completed' }];
-      }
       return [];
     });
-  }, [group, pastDates]);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const attendanceWarnings = pastDates
+      .filter(classItem => (
+        !classItem.canceled &&
+        !isAttendanceComplete(classItem) &&
+        parseDateStr(classItem.date) < today
+      ))
+      .map(classItem => ({
+        type: 'attendance',
+        date: classItem.date,
+        message: 'Attendance is not completed',
+      }));
+
+    return [...missingWarnings, ...attendanceWarnings];
+  }, [group, pastDates, pastClassesLoaded]);
 
   useEffect(() => {
     const g = groups.find(g => g.id === groupId);
@@ -118,22 +132,40 @@ function GroupClassesPage() {
   }, [groupId, groups]);
 
   useEffect(() => {
+    let active = true;
+
     const fetchPastClasses = async () => {
       if (!groupId) return;
-      const snap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-      const fetched = snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ...data,
-          date: data?.date || d.id,
-        };
-      });
-      fetched.sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
-      setPastDates(fetched);
+      setPastClassesLoaded(false);
+
+      try {
+        const snap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
+        const fetched = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            date: data?.date || d.id,
+          };
+        });
+        fetched.sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
+        if (active) {
+          setPastDates(fetched);
+          setPastClassesLoaded(true);
+        }
+      } catch (err) {
+        console.error('Failed to load classes:', err);
+        if (active) {
+          setPastDates([]);
+          setPastClassesLoaded(false);
+        }
+      }
     };
 
     fetchPastClasses();
+    return () => {
+      active = false;
+    };
   }, [groupId, db]);
 
   const toggleFutureDates = () => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import CoachTasksPage from './CoachTasksPage';
 import './GroupsPage.css';
 
 function GroupsPage() {
@@ -28,6 +29,8 @@ function GroupsPage() {
             Logout
           </button>
         </div>
+
+        {(user?.role === 'admin' || user?.role === 'coach') && <CoachTasksPage />}
 
         <button
           className="students-button"
