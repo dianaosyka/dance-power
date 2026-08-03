@@ -58,7 +58,9 @@ function CoachTasksPage() {
   const [expanded, setExpanded] = useState(false);
 
   const loadWarnings = useCallback(async () => {
-    if (!groups.length) {
+    const activeGroups = groups.filter(group => group.hidden !== true);
+
+    if (!activeGroups.length) {
       setWarnings([]);
       setLoading(false);
       return;
@@ -69,7 +71,7 @@ function CoachTasksPage() {
     try {
       // Four targeted document reads per group keeps the cost predictable and
       // avoids downloading each group's complete class history.
-      const recentChecks = groups.flatMap(group =>
+      const recentChecks = activeGroups.flatMap(group =>
         getRecentExpectedDates(group.dayOfWeek ?? 5).map(async date => {
           const snapshot = await getDoc(doc(db, `groups/${group.id}/pastClasses`, date));
           return {
@@ -84,7 +86,7 @@ function CoachTasksPage() {
 
       // This query returns only unresolved documents, so old completed classes
       // do not consume reads. An unresolved class stays visible until handled.
-      const incompleteChecks = groups.map(async group => {
+      const incompleteChecks = activeGroups.map(async group => {
         const snapshot = await getDocs(query(
           collection(db, `groups/${group.id}/pastClasses`),
           where('attendanceCompleted', '==', false)
@@ -103,7 +105,7 @@ function CoachTasksPage() {
       // Classes created before attendance tracking was added have no boolean
       // field at all, so Firestore cannot find them with `== false`. Limit this
       // compatibility scan to the post-cutoff period.
-      const legacyChecks = groups.map(async group => {
+      const legacyChecks = activeGroups.map(async group => {
         const snapshot = await getDocs(query(
           collection(db, `groups/${group.id}/pastClasses`),
           where('timestamp', '>=', Timestamp.fromDate(ATTENDANCE_TRACKING_START))

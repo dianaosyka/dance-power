@@ -97,7 +97,7 @@ function GroupClassesPage() {
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
 
   const warnings = useMemo(() => {
-    if (!group || !pastClassesLoaded) return [];
+    if (!group || group.hidden === true || !pastClassesLoaded) return [];
 
     const classByDate = new Map(pastDates.map(item => [item.date, item]));
     const missingWarnings = getRecentExpectedDates(group.dayOfWeek ?? 5).flatMap(date => {
