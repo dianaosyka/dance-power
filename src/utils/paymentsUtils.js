@@ -13,6 +13,19 @@ function parseTimeToMinutes(timeStr) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+export function isClassUpcoming(dateStr, timeStr, now = new Date()) {
+  const classDate = parseDate(dateStr);
+  const timeMatch = typeof timeStr === 'string'
+    ? timeStr.match(/(\d{1,2}):(\d{2})/)
+    : null;
+
+  if (timeMatch) {
+    classDate.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
+  }
+
+  return classDate > now;
+}
+
 function formatDate(date) {
   return (
     String(date.getDate()).padStart(2, '0') + '.' +

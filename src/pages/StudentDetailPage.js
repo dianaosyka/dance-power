@@ -9,7 +9,7 @@ import {
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
-import { getPaymentClasses } from '../utils/paymentsUtils';
+import { getPaymentClasses, isClassUpcoming } from '../utils/paymentsUtils';
 
 function StudentDetailPage() {
   const { studentId } = useParams();
@@ -119,12 +119,8 @@ function StudentDetailPage() {
     };
   }, [currentPayment, groups, db]);
 
-  const getAttendanceIcon = (groupId, date) => {
-    const today = new Date();
-    const [dd, mm, yyyy] = date.split('.').map(Number);
-    const classDate = new Date(yyyy, mm - 1, dd);
-
-    if (classDate > today) return '🕒';
+  const getAttendanceIcon = (groupId, date, groupTime) => {
+    if (isClassUpcoming(date, groupTime)) return '🕒';
 
     const absentGroups = absences?.[date] || [];
     return absentGroups.includes(groupId) ? '❌' : '✅';
@@ -259,7 +255,7 @@ function StudentDetailPage() {
                     <td>{index + 1}</td>
                     <td>{c.date}</td>
                     <td>{c.groupName}</td>
-                    <td>{getAttendanceIcon(c.groupId, c.date)}</td>
+                    <td>{getAttendanceIcon(c.groupId, c.date, c.groupTime)}</td>
                   </tr>
                 ))
               ) : (
