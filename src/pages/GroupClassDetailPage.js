@@ -30,6 +30,7 @@ function GroupClassDetailPage() {
     () => doc(db, `groups/${groupId}/pastClasses`, date),
     [db, groupId, date]
   );
+  const pastClassesByGroup = React.useRef(new Map());
 
   const [group, setGroup] = useState(null);
   const [signedUp, setSignedUp] = useState(undefined);
@@ -145,6 +146,7 @@ function GroupClassDetailPage() {
         groups,
         db,
         user,
+        pastClassesByGroup: pastClassesByGroup.current,
       });
 
       setSignedUp(matched);

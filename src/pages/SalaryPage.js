@@ -105,6 +105,7 @@ function SalaryPage() {
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
   const calculationInProgress = useRef(false);
+  const pastClassesByGroup = useRef(new Map());
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
@@ -128,8 +129,12 @@ function SalaryPage() {
     setSummary(getSavedSalarySummary(salarySummaryStorageKey));
   }, [salarySummaryStorageKey]);
 
-  const calculateSalary = useCallback(async () => {
+  const calculateSalary = useCallback(async ({ refreshClasses = false } = {}) => {
     if (!selectedMonth || calculationInProgress.current) return;
+
+    if (refreshClasses) {
+      pastClassesByGroup.current.clear();
+    }
 
     calculationInProgress.current = true;
     setIsCalculating(true);
@@ -153,19 +158,20 @@ function SalaryPage() {
       let grossTotal = 0;
       let rentTotal = 580;
       let coachesTotal = 0;
-      const pastClassesByGroup = new Map();
 
       for (const group of groups) {
-        const snap = await getDocs(collection(db, `groups/${group.id}/pastClasses`));
-        pastClassesByGroup.set(
-          group.id,
-          snap.docs.map(doc => ({
+        let pastClassDocs = pastClassesByGroup.current.get(group.id);
+
+        if (!pastClassDocs) {
+          const snap = await getDocs(collection(db, `groups/${group.id}/pastClasses`));
+          pastClassDocs = snap.docs.map(doc => ({
             id: doc.id,
             data: () => doc.data(),
-          }))
-        );
+          }));
+          pastClassesByGroup.current.set(group.id, pastClassDocs);
+        }
 
-        for (const classDoc of snap.docs) {
+        for (const classDoc of pastClassDocs) {
           const classData = classDoc.data();
           const date = classData?.date || classDoc.id;
 
@@ -188,7 +194,7 @@ function SalaryPage() {
             groups,
             db,
             user: { role: 'admin' },
-            pastClassesByGroup,
+            pastClassesByGroup: pastClassesByGroup.current,
           });
 
           const studentCount = signedUp.length;
@@ -350,7 +356,7 @@ function SalaryPage() {
         />
         <button
           className="salary-calculate-button"
-          onClick={calculateSalary}
+          onClick={() => calculateSalary({ refreshClasses: true })}
           disabled={isCalculating}
         >
           {isCalculating ? 'Refreshing...' : summary ? 'Refresh' : 'Calculate'}

@@ -1,11 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  deleteDoc,
-  doc,
-  getDoc,
-  updateDoc
-} from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
@@ -21,6 +16,7 @@ function StudentDetailPage() {
   const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
+  const pastClassesByGroup = useRef(new Map());
 
   const student = students.find(s => s.id === studentId);
 
@@ -68,20 +64,8 @@ function StudentDetailPage() {
     studentPayments.length > 0 ? studentPayments[currentIndex] : null;
 
   useEffect(() => {
-    const fetchAbsences = async () => {
-      try {
-        const ref = doc(db, 'students', studentId);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data().absences || {} : {};
-        setAbsences(data);
-      } catch (err) {
-        console.error('Error fetching absences:', err);
-        setAbsences({});
-      }
-    };
-
-    if (studentId) fetchAbsences();
-  }, [studentId, db]);
+    setAbsences(student?.absences || {});
+  }, [student]);
 
   useEffect(() => {
     if (!currentPayment) {
@@ -99,6 +83,7 @@ function StudentDetailPage() {
           payment: currentPayment,
           groups,
           db,
+          pastClassesByGroup: pastClassesByGroup.current,
         });
 
         if (active) {
