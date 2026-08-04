@@ -59,13 +59,19 @@
 }
 
 .classes-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 70px;
+  align-items: center;
   font-size: 12px;
   border-bottom: 1px solid #aaa;
   padding-bottom: 4px;
   margin-bottom: 8px;
   opacity: 0.6;
+}
+
+.classes-header span:nth-child(2),
+.classes-header span:nth-child(3) {
+  text-align: center;
 }
 
 .class-list {
@@ -75,11 +81,25 @@
 }
 
 .class-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 70px;
+  align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid #9b59b6;
   font-size: 14px;
+}
+
+.class-item .check,
+.class-item .arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.class-item .arrow {
+  justify-self: stretch;
+  cursor: pointer;
 }
 
 .check {
@@ -88,6 +108,13 @@
 
 .arrow {
   color: #ccc;
+}
+
+@media (max-width: 420px) {
+  .classes-header,
+  .class-item {
+    grid-template-columns: minmax(0, 1fr) 92px 60px;
+  }
 }
 
 .class-warnings {
@@ -168,6 +195,9 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  box-sizing: border-box;
+  padding: 18px;
+  z-index: 1000;
 }
 
 .modal-box {
@@ -186,6 +216,67 @@
 .labels-inputs{
   font-size: 12px;
   color: gray;
+}
+
+.add-class-modal {
+  box-sizing: border-box;
+  width: min(100%, 390px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding: 26px;
+  border-radius: 16px;
+}
+
+.add-class-modal h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 23px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.add-class-modal h3 span { color: #555; font-size: 27px; }
+.add-class-form { display: grid; gap: 15px; }
+.add-class-field { display: grid; gap: 6px; }
+.add-class-field > span { color: #666; font-size: 13px; font-weight: 600; }
+.add-class-field small {
+  margin-left: 5px;
+  color: #aaa;
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.add-class-field input,
+.add-class-field select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 45px;
+  padding: 0 12px;
+  border: 1px solid #d1d1d1;
+  border-radius: 8px;
+  background: #fff;
+  color: #171717;
+  font: inherit;
+  font-size: 15px;
+}
+
+.add-class-field input:focus,
+.add-class-field select:focus { border-color: #7b2cbf; outline: 2px solid rgba(123,44,191,.13); }
+.add-class-field--optional { grid-template-columns: 1fr 125px; align-items: center; }
+.add-class-field--optional input { height: 39px; }
+
+.add-class-checkbox { display: flex; align-items: center; gap: 9px; width: max-content; color: #333; font-size: 14px; cursor: pointer; }
+.add-class-checkbox input { width: 18px; height: 18px; margin: 0; accent-color: #7b2cbf; }
+.add-class-actions { gap: 12px; margin-top: 24px; }
+.add-class-actions button { flex: 1; min-height: 44px; }
+.add-class-actions button:last-child { background: #4caf50; }
+
+@media (max-width: 420px) {
+  .add-class-modal { padding: 22px 18px; }
+  .add-class-modal h3 { font-size: 18px; }
+  .add-class-field--optional { grid-template-columns: 1fr 112px; }
 }
 
 .modal-buttons {

@@ -13,6 +13,7 @@ import GroupClassDetailPage from './pages/GroupClassDetailPage';
 import LoginPage from './pages/LoginPage';
 import PaymentHistoryPage from './pages/PaymentHistoryPage';
 import SalaryPage from './pages/SalaryPage';
+import SchedulePage from './pages/SchedulePage';
 
 function AppRoutes() {
   const { user } = useUser();
@@ -43,6 +44,7 @@ function AppRoutes() {
       <Route path="/group/:groupId/class/:date" element={<GroupClassDetailPage />} />
       <Route path="/payment-history" element={<PaymentHistoryPage />} />
       <Route path="/salary" element={<SalaryPage />} />
+      <Route path="/schedule" element={<SchedulePage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

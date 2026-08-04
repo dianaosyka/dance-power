@@ -40,6 +40,12 @@ function GroupsPage() {
         </button>
         <button
           className="students-button"
+          onClick={() => navigate('/schedule')}
+        >
+          SCHEDULE
+        </button>
+        <button
+          className="students-button"
           onClick={() => navigate('/payment-history')}
         >
           PAYMENT HISTORY
