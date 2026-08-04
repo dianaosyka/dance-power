@@ -29,6 +29,64 @@ body {
   font-size: 14px;
 }
 
+.optional-field {
+  opacity: 0.58;
+  transition: opacity 0.2s ease;
+}
+
+.optional-field:focus-within {
+  opacity: 1;
+}
+
+.optional-field label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.optional-field label span {
+  margin-left: 4px;
+  font-size: 9px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.optional-input {
+  padding: 7px 9px;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 12px;
+}
+
+.optional-input:focus {
+  border-color: rgba(255, 255, 255, 0.7);
+  outline: none;
+}
+
+.has-error .input,
+.has-error .group-box {
+  border-color: #ff8fa3;
+  box-shadow: 0 0 0 2px rgba(255, 86, 115, 0.18);
+}
+
+.required-empty .input,
+.required-empty .group-box {
+  border-color: #f0448f;
+  box-shadow: 0 0 0 2px rgba(240, 68, 143, 0.34);
+}
+
+.required-filled .input,
+.required-filled .group-box {
+  border-color: #35d07f;
+  box-shadow: 0 0 0 2px rgba(53, 208, 127, 0.24);
+}
+
+.required-filled.has-error .input {
+  border-color: #ff8fa3;
+  box-shadow: 0 0 0 2px rgba(255, 86, 115, 0.28);
+}
+
 .dropdown {
   background-color: white;
   color: black;
@@ -52,6 +110,7 @@ body {
 .group-box {
   background: #00006b;
   padding: 10px;
+  border: 1px solid transparent;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
