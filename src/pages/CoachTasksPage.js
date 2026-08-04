@@ -22,7 +22,6 @@ function getRecentExpectedDates(weekday) {
   const dates = [];
   const cursor = new Date();
   cursor.setHours(0, 0, 0, 0);
-  cursor.setDate(cursor.getDate() - 1);
 
   while (dates.length < DATES_TO_CHECK) {
     if (cursor.getDay() === weekday) dates.push(formatDate(cursor));
