@@ -122,10 +122,33 @@ function CoachTasksPage() {
           }));
       });
 
-      const [recentResults, incompleteResultsByGroup, legacyResultsByGroup] = await Promise.all([
+      // Query only unresolved replacement requests within each known group.
+      // This works with the app's existing nested-collection permissions and
+      // does not require a collection-group composite index.
+      const replacementConfirmations = activeGroups.map(async group => {
+        const snapshot = await getDocs(query(
+          collection(db, `groups/${group.id}/replacementSuggestions`),
+          where('status', 'in', ['pending', 'denied'])
+        ));
+        return snapshot.docs
+          .filter(replacementDoc => {
+            const data = replacementDoc.data();
+            if (data?.status === 'pending') return data.suggestedCoach === user.id;
+            const groupCoaches = Array.isArray(group.coach) ? group.coach : [group.coach];
+            return data?.status === 'denied' && groupCoaches.includes(user.id);
+          })
+          .map(replacementDoc => ({
+            group,
+            date: replacementDoc.id,
+            status: replacementDoc.data()?.status,
+          }));
+      });
+
+      const [recentResults, incompleteResultsByGroup, legacyResultsByGroup, replacementResultsByGroup] = await Promise.all([
         Promise.all(recentChecks),
         Promise.all(incompleteChecks),
         Promise.all(legacyChecks),
+        Promise.all(replacementConfirmations),
       ]);
       const results = [
         ...recentResults,
@@ -156,6 +179,17 @@ function CoachTasksPage() {
           const warning = { type: 'attendance', groupId: group.id, groupName: group.name, date };
           warningByKey.set(`attendance-${group.id}-${date}`, warning);
         }
+      });
+
+      replacementResultsByGroup.flat().forEach(({ group, date, status }) => {
+        const groupId = group.id;
+        const type = status === 'denied' ? 'replacement-denied' : 'replacement';
+        warningByKey.set(`${type}-${groupId}-${date}`, {
+          type,
+          groupId,
+          groupName: group.name,
+          date,
+        });
       });
 
       const nextWarnings = [...warningByKey.values()];
@@ -222,13 +256,25 @@ function CoachTasksPage() {
                       )}
                     >
                       <span className="main-warning-icon" aria-hidden="true">
-                        {warning.type === 'missing' ? '🚫' : '⚠️'}
+                        {warning.type === 'missing'
+                          ? '🚫'
+                          : warning.type === 'replacement'
+                            ? '🔄'
+                            : warning.type === 'replacement-denied'
+                              ? '✕'
+                              : '⚠️'}
                       </span>
                       <span>
                         <strong>{warning.groupName}</strong>
-                        <small>{warning.date} · {warning.type === 'missing'
-                          ? 'Class was not added'
-                          : 'Attendance is not complete'}</small>
+                        <small>{warning.date} · {
+                          warning.type === 'missing'
+                            ? 'Class was not added'
+                            : warning.type === 'replacement'
+                              ? 'Confirm replacement request'
+                              : warning.type === 'replacement-denied'
+                                ? 'Replacement was denied — acknowledge it'
+                              : 'Attendance is not complete'
+                        }</small>
                       </span>
                       <span aria-hidden="true">➔</span>
                     </button>

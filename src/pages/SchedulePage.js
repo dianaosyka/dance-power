@@ -50,6 +50,7 @@ function SchedulePage() {
   const [view, setView] = useState('week');
   const [anchor, setAnchor] = useState(() => new Date());
   const [pastClasses, setPastClasses] = useState([]);
+  const [replacements, setReplacements] = useState([]);
   const [loading, setLoading] = useState(true);
   const cache = useRef(new Map());
 
@@ -82,23 +83,42 @@ function SchedulePage() {
           for (let index = 0; index < visibleDateKeys.length; index += 30) {
             chunks.push(visibleDateKeys.slice(index, index + 30));
           }
-          const snapshots = await Promise.all(chunks.map(keys => getDocs(query(
-            collection(db, `groups/${group.id}/pastClasses`),
-            where(documentId(), 'in', keys)
-          ))));
-          const classes = snapshots.flatMap(snapshot => snapshot.docs.map(item => ({
+          const [classSnapshots, replacementSnapshots] = await Promise.all([
+            Promise.all(chunks.map(keys => getDocs(query(
+              collection(db, `groups/${group.id}/pastClasses`),
+              where(documentId(), 'in', keys)
+            )))),
+            Promise.all(chunks.map(keys => getDocs(query(
+              collection(db, `groups/${group.id}/replacementSuggestions`),
+              where(documentId(), 'in', keys)
+            )))),
+          ]);
+          const classes = classSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
               id: item.id,
               ...item.data(),
               date: item.data().date || item.id,
               group,
             })));
-          cache.current.set(cacheKey, classes);
-          return classes;
+          const groupReplacements = replacementSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
+            id: item.id,
+            ...item.data(),
+            date: item.id,
+            group,
+          })));
+          const result = { classes, replacements: groupReplacements };
+          cache.current.set(cacheKey, result);
+          return result;
         }));
-        if (active) setPastClasses(results.flat());
+        if (active) {
+          setPastClasses(results.flatMap(result => result.classes));
+          setReplacements(results.flatMap(result => result.replacements));
+        }
       } catch (error) {
         console.error('Failed to load schedule:', error);
-        if (active) setPastClasses([]);
+        if (active) {
+          setPastClasses([]);
+          setReplacements([]);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -118,6 +138,9 @@ function SchedulePage() {
     const existingByDateAndGroup = new Map(
       pastClasses.map(item => [`${item.date}-${item.group.id}`, item])
     );
+    const replacementByDateAndGroup = new Map(
+      replacements.map(item => [`${item.date}-${item.group.id}`, item])
+    );
 
     const dateCells = visibleDates.map(date => {
       const key = dateKey(date);
@@ -128,7 +151,12 @@ function SchedulePage() {
           .filter(group => !existingByDateAndGroup.has(`${key}-${group.id}`))
           .map(group => ({ date: key, group, isFuture: true }))
         : [];
-      const classes = [...recorded, ...recurring].sort((first, second) => {
+      const classes = [...recorded, ...recurring]
+        .map(item => ({
+          ...item,
+          replacement: replacementByDateAndGroup.get(`${key}-${item.group.id}`) || null,
+        }))
+        .sort((first, second) => {
         const firstTime = timeInMinutes(first);
         const secondTime = timeInMinutes(second);
         if (firstTime !== secondTime) return firstTime - secondTime;
@@ -141,7 +169,7 @@ function SchedulePage() {
     const firstOffset = (visibleDates[0].getDay() + 6) % 7;
     const trailing = (7 - ((firstOffset + dateCells.length) % 7)) % 7;
     return [...Array(firstOffset).fill(null), ...dateCells, ...Array(trailing).fill(null)];
-  }, [groups, pastClasses, view, visibleDates]);
+  }, [groups, pastClasses, replacements, view, visibleDates]);
 
   const changePeriod = amount => {
     setAnchor(current => view === 'week'
@@ -194,19 +222,32 @@ function SchedulePage() {
                     </span>
                     <div className="schedule-events">
                       {cell.classes.map((item, itemIndex) => {
-                        const ids = coachIds(item, item.group);
+                        const ids = item.replacement?.status === 'confirmed'
+                          ? [item.replacement.suggestedCoach]
+                          : coachIds(item, item.group);
                         const names = ids.length ? ids.map(id => coachNames.get(id) || id).join(', ') : 'Coach TBA';
+                        const replacementName = item.replacement
+                          ? coachNames.get(item.replacement.suggestedCoach) || item.replacement.suggestedCoach
+                          : '';
+                        const replacementLabel = item.replacement?.status === 'confirmed'
+                          ? `Replacement confirmed · ${replacementName}`
+                          : item.replacement?.status === 'denied'
+                            ? `Replacement denied · ${replacementName}`
+                            : item.replacement
+                              ? `Replacement pending · ${replacementName}`
+                              : '';
                         return (
                           <button
                             type="button"
                             key={`${item.group.id}-${itemIndex}`}
-                            className={`schedule-event ${item.canceled ? 'is-canceled' : ''} ${item.isFuture ? 'is-future' : 'is-recorded'}`}
+                            className={`schedule-event ${item.canceled ? 'is-canceled' : ''} ${item.isFuture ? 'is-future' : 'is-recorded'} ${item.replacement ? `has-replacement--${item.replacement.status}` : ''}`}
                             onClick={() => navigate(`/group/${item.group.id}/class/${cell.key}`)}
                             title={`${item.group.name} · ${classTime(item)} · ${names}`}
                           >
                             <strong>{classTime(item)}</strong>
                             <span>{item.group.name}</span>
                             <small>{item.canceled ? 'Canceled' : names}</small>
+                            {replacementLabel && <em>{replacementLabel}</em>}
                           </button>
                         );
                       })}
@@ -221,6 +262,9 @@ function SchedulePage() {
         <div className="schedule-legend">
           <span><i className="legend-recorded" /> Recorded class</span>
           <span><i className="legend-future" /> Upcoming class</span>
+          <span><i className="legend-pending" /> Replacement pending</span>
+          <span><i className="legend-confirmed" /> Replacement confirmed</span>
+          <span><i className="legend-denied" /> Replacement denied</span>
         </div>
       </div>
     </div>

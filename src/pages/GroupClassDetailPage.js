@@ -326,12 +326,12 @@ function GroupClassDetailPage() {
     }
   };
 
-  const handleSuggestReplacement = async () => {
-    if (!replacementCoachId || savingReplacement) return;
-    const autoConfirmed = replacementCoachId === user?.id;
+  const handleSuggestReplacement = async (coachId = replacementCoachId) => {
+    if (!coachId || savingReplacement) return;
+    const autoConfirmed = coachId === user?.id;
     const nextReplacement = {
       originalCoach: group?.coach || '',
-      suggestedCoach: replacementCoachId,
+      suggestedCoach: coachId,
       suggestedBy: user.id,
       status: autoConfirmed ? 'confirmed' : 'pending',
       suggestedAt: serverTimestamp(),
@@ -340,8 +340,14 @@ function GroupClassDetailPage() {
 
     setSavingReplacement(true);
     try {
-      await setDoc(replacementRef, nextReplacement);
+      const writes = [setDoc(replacementRef, nextReplacement)];
+      if (autoConfirmed && classExists) {
+        writes.push(setDoc(classRef, { coach: [coachId] }, { merge: true }));
+      }
+      await Promise.all(writes);
       setReplacement({ ...nextReplacement, suggestedAt: new Date(), confirmedAt: autoConfirmed ? new Date() : null });
+      setReplacementCoachId(coachId);
+      if (autoConfirmed && classExists) setCoaches([coachId]);
     } catch (error) {
       console.error('Failed to suggest replacement:', error);
       alert('❌ Failed to save replacement suggestion');
@@ -354,15 +360,94 @@ function GroupClassDetailPage() {
     if (!replacement || replacement.suggestedCoach !== user?.id || savingReplacement) return;
     setSavingReplacement(true);
     try {
-      await setDoc(replacementRef, {
-        status: 'confirmed',
-        confirmedBy: user.id,
-        confirmedAt: serverTimestamp(),
-      }, { merge: true });
+      const writes = [setDoc(replacementRef, {
+          status: 'confirmed',
+          confirmedBy: user.id,
+          confirmedAt: serverTimestamp(),
+        }, { merge: true })];
+      if (classExists) {
+        writes.push(setDoc(classRef, { coach: [user.id] }, { merge: true }));
+      }
+      await Promise.all(writes);
       setReplacement(current => ({ ...current, status: 'confirmed', confirmedBy: user.id }));
+      if (classExists) setCoaches([user.id]);
     } catch (error) {
       console.error('Failed to confirm replacement:', error);
       alert('❌ Failed to confirm replacement');
+    } finally {
+      setSavingReplacement(false);
+    }
+  };
+
+  const handleCancelReplacement = async () => {
+    if (!replacement || savingReplacement) return;
+    if (!window.confirm('Cancel this replacement suggestion?')) return;
+
+    setSavingReplacement(true);
+    try {
+      const originalCoach = replacement.originalCoach || group?.coach;
+      const writes = [deleteDoc(replacementRef)];
+      if (classExists && replacement.status === 'confirmed' && originalCoach) {
+        writes.push(setDoc(classRef, { coach: [originalCoach] }, { merge: true }));
+      }
+      await Promise.all(writes);
+      setReplacement(null);
+      setReplacementCoachId('');
+      if (classExists && replacement.status === 'confirmed' && originalCoach) {
+        setCoaches([originalCoach]);
+      }
+    } catch (error) {
+      console.error('Failed to cancel replacement:', error);
+      alert('❌ Failed to cancel replacement');
+    } finally {
+      setSavingReplacement(false);
+    }
+  };
+
+  const handleDenyReplacement = async () => {
+    if (!replacement || replacement.suggestedCoach !== user?.id || savingReplacement) return;
+    if (!window.confirm('Deny this replacement request?')) return;
+
+    setSavingReplacement(true);
+    try {
+      const originalCoach = replacement.originalCoach || group?.coach;
+      const writes = [setDoc(replacementRef, {
+        status: 'denied',
+        deniedBy: user.id,
+        deniedAt: serverTimestamp(),
+        confirmedBy: deleteField(),
+        confirmedAt: deleteField(),
+      }, { merge: true })];
+      if (classExists && originalCoach) {
+        writes.push(setDoc(classRef, { coach: [originalCoach] }, { merge: true }));
+      }
+      await Promise.all(writes);
+      setReplacement(current => ({
+        ...current,
+        status: 'denied',
+        deniedBy: user.id,
+        confirmedBy: undefined,
+        confirmedAt: undefined,
+      }));
+      if (classExists && originalCoach) setCoaches([originalCoach]);
+    } catch (error) {
+      console.error('Failed to deny replacement:', error);
+      alert('❌ Failed to deny replacement');
+    } finally {
+      setSavingReplacement(false);
+    }
+  };
+
+  const handleAcknowledgeDenial = async () => {
+    if (!replacement || replacement.status !== 'denied' || !isGroupCoach || savingReplacement) return;
+    setSavingReplacement(true);
+    try {
+      await deleteDoc(replacementRef);
+      setReplacement(null);
+      setReplacementCoachId('');
+    } catch (error) {
+      console.error('Failed to acknowledge denial:', error);
+      alert('❌ Failed to acknowledge denial');
     } finally {
       setSavingReplacement(false);
     }
@@ -373,7 +458,17 @@ function GroupClassDetailPage() {
     [coaches]
   );
   const canEditComment = user?.role === 'admin' || user?.role === 'coach';
-  const isGroupCoach = user?.role === 'coach' && group?.coach === user?.id;
+  // Respect the active view: an admin using Coach view has coach permissions.
+  const isAdminAccount = user?.role === 'admin';
+  const isGroupCoach = group?.coach === user?.id;
+  const canSuggestReplacement = isFutureDate(date) && (user?.role === 'coach' || isAdminAccount);
+  const canNominateOtherCoach = isAdminAccount || isGroupCoach;
+  const replacementOptions = canNominateOtherCoach
+    ? (coaches || [])
+    : (coaches || []).filter(coach => coach.id === user?.id);
+  const canCancelReplacement = replacement &&
+    replacement.suggestedBy === user?.id &&
+    replacement.suggestedCoach !== user?.id;
   const proposedCoachName = replacement
     ? (coachNameById.get(replacement.suggestedCoach) || replacement.suggestedCoach)
     : '';
@@ -383,77 +478,125 @@ function GroupClassDetailPage() {
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
       {!classExists && isFutureDate(date) && canEditComment && (
-        <>
-          <section className="future-class-callout">
-            <div>
-              <strong>Upcoming class</strong>
-              <span>This class has not been added yet.</span>
+        <section className="future-class-callout">
+          <div>
+            <strong>Upcoming class</strong>
+            <span>This class has not been added yet.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/group/${groupId}`, {
+              state: {
+                addClassDate: date,
+                replacementCoachId: replacement?.status === 'confirmed'
+                  ? replacement.suggestedCoach
+                  : '',
+              },
+            })}
+          >
+            + ADD THIS CLASS
+          </button>
+        </section>
+      )}
+
+      {isFutureDate(date) && (canSuggestReplacement || replacement) && (
+        <section className="replacement-card">
+          <h3>Replacement coach</h3>
+
+          {replacement && (
+            <div className={`replacement-status replacement-status--${replacement.status}`}>
+              <span>{replacement.status === 'confirmed'
+                ? '✓ Confirmed'
+                : replacement.status === 'denied'
+                  ? '✕ Denied'
+                  : 'Waiting for confirmation'}</span>
+              <strong>{proposedCoachName}</strong>
             </div>
+          )}
+
+          {canSuggestReplacement && canNominateOtherCoach && (
+            <div className="replacement-suggest-form">
+              <label htmlFor="replacement-coach">
+                {canNominateOtherCoach ? 'Suggest a coach' : 'Take this class as replacement'}
+              </label>
+              <select
+                id="replacement-coach"
+                value={replacementCoachId}
+                onChange={event => setReplacementCoachId(event.target.value)}
+                disabled={savingReplacement}
+              >
+                <option value="">Select coach</option>
+                {replacementOptions.map(coach => (
+                  <option key={coach.id} value={coach.id}>
+                    {coach.id === user.id ? `${coach.name || coach.id} (me)` : coach.name || coach.id}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => handleSuggestReplacement()}
+                disabled={!replacementCoachId || savingReplacement}
+              >
+                {savingReplacement ? 'Saving…' : replacementCoachId === user.id ? 'Confirm me as replacement' : 'Send suggestion'}
+              </button>
+            </div>
+          )}
+
+          {canSuggestReplacement && !canNominateOtherCoach && !replacement && (
             <button
               type="button"
-              onClick={() => navigate(`/group/${groupId}`, {
-                state: {
-                  addClassDate: date,
-                  replacementCoachId: replacement?.status === 'confirmed'
-                    ? replacement.suggestedCoach
-                    : '',
-                },
-              })}
+              className="replacement-self-button"
+              onClick={() => handleSuggestReplacement(user.id)}
+              disabled={savingReplacement}
             >
-              + ADD THIS CLASS
+              {savingReplacement ? 'Saving…' : '+ SUGGEST ME'}
             </button>
-          </section>
-
-          {(isGroupCoach || replacement) && (
-            <section className="replacement-card">
-              <h3>Replacement coach</h3>
-
-              {replacement && (
-                <div className={`replacement-status replacement-status--${replacement.status}`}>
-                  <span>{replacement.status === 'confirmed' ? '✓ Confirmed' : 'Waiting for confirmation'}</span>
-                  <strong>{proposedCoachName}</strong>
-                </div>
-              )}
-
-              {isGroupCoach && (
-                <div className="replacement-suggest-form">
-                  <label htmlFor="replacement-coach">Suggest a coach</label>
-                  <select
-                    id="replacement-coach"
-                    value={replacementCoachId}
-                    onChange={event => setReplacementCoachId(event.target.value)}
-                    disabled={savingReplacement}
-                  >
-                    <option value="">Select coach</option>
-                    {(coaches || []).map(coach => (
-                      <option key={coach.id} value={coach.id}>
-                        {coach.id === user.id ? `${coach.name} (me)` : coach.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleSuggestReplacement}
-                    disabled={!replacementCoachId || savingReplacement}
-                  >
-                    {savingReplacement ? 'Saving…' : replacementCoachId === user.id ? 'Confirm me as replacement' : 'Send suggestion'}
-                  </button>
-                </div>
-              )}
-
-              {replacement?.status === 'pending' && replacement.suggestedCoach === user?.id && (
-                <button
-                  type="button"
-                  className="replacement-confirm-button"
-                  onClick={handleConfirmReplacement}
-                  disabled={savingReplacement}
-                >
-                  {savingReplacement ? 'Confirming…' : '✓ CONFIRM REPLACEMENT'}
-                </button>
-              )}
-            </section>
           )}
-        </>
+
+          {replacement?.status === 'pending' && replacement.suggestedCoach === user?.id && (
+            <button
+              type="button"
+              className="replacement-confirm-button"
+              onClick={handleConfirmReplacement}
+              disabled={savingReplacement}
+            >
+              {savingReplacement ? 'Confirming…' : '✓ CONFIRM REPLACEMENT'}
+            </button>
+          )}
+
+          {replacement && replacement.status !== 'denied' && replacement.suggestedCoach === user?.id && (
+            <button
+              type="button"
+              className="replacement-deny-button"
+              onClick={handleDenyReplacement}
+              disabled={savingReplacement}
+            >
+              {savingReplacement ? 'Saving…' : '✕ DENY REPLACEMENT'}
+            </button>
+          )}
+
+          {replacement?.status === 'denied' && isGroupCoach && (
+            <button
+              type="button"
+              className="replacement-acknowledge-button"
+              onClick={handleAcknowledgeDenial}
+              disabled={savingReplacement}
+            >
+              {savingReplacement ? 'Saving…' : 'I UNDERSTAND — CLOSE REQUEST'}
+            </button>
+          )}
+
+          {canCancelReplacement && (
+            <button
+              type="button"
+              className="replacement-cancel-button"
+              onClick={handleCancelReplacement}
+              disabled={savingReplacement}
+            >
+              CANCEL SUGGESTION
+            </button>
+          )}
+        </section>
       )}
       {signedUp?.length === 0
         ? (isCanceled

@@ -199,6 +199,16 @@
   background: rgba(255, 179, 0, 0.12);
 }
 
+.main-warning--replacement {
+  border-color: rgba(134, 239, 172, 0.55);
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.main-warning--replacement-denied {
+  border-color: rgba(255, 110, 125, 0.6);
+  background: rgba(185, 20, 48, 0.3);
+}
+
 .main-warning button {
   display: grid;
   grid-template-columns: auto 1fr auto;
