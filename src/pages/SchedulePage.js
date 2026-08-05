@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
@@ -46,13 +46,12 @@ function coachIds(classItem, group) {
 
 function SchedulePage() {
   const navigate = useNavigate();
-  const { db, groups, coaches } = useData();
+  const { db, groups, coaches, scheduleCache, replacementCache } = useData();
   const [view, setView] = useState('week');
   const [anchor, setAnchor] = useState(() => new Date());
   const [pastClasses, setPastClasses] = useState([]);
   const [replacements, setReplacements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const cache = useRef(new Map());
 
   const visibleDates = useMemo(() => {
     if (view === 'week') {
@@ -75,7 +74,7 @@ function SchedulePage() {
         const rangeKey = visibleDateKeys.join('|');
         const results = await Promise.all(groups.map(async group => {
           const cacheKey = `${group.id}:${rangeKey}`;
-          if (cache.current.has(cacheKey)) return cache.current.get(cacheKey);
+          if (scheduleCache.has(cacheKey)) return scheduleCache.get(cacheKey);
 
           // Firestore permits up to 30 values in an `in` query. This fetches
           // only documents for visible dates, rather than the group's history.
@@ -105,8 +104,12 @@ function SchedulePage() {
             date: item.id,
             group,
           })));
+          visibleDateKeys.forEach(key => replacementCache.set(`${group.id}:${key}`, null));
+          groupReplacements.forEach(item => {
+            replacementCache.set(`${group.id}:${item.id}`, item);
+          });
           const result = { classes, replacements: groupReplacements };
-          cache.current.set(cacheKey, result);
+          scheduleCache.set(cacheKey, result);
           return result;
         }));
         if (active) {
@@ -125,7 +128,7 @@ function SchedulePage() {
     }
     loadClasses();
     return () => { active = false; };
-  }, [db, groups, visibleDateKeys]);
+  }, [db, groups, visibleDateKeys, scheduleCache, replacementCache]);
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),

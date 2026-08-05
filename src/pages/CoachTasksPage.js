@@ -48,7 +48,7 @@ function isClassCoach(classItem, user) {
 }
 
 function CoachTasksPage() {
-  const { db, groups } = useData();
+  const { db, groups, coachTasksCache } = useData();
   const { user } = useUser();
   const navigate = useNavigate();
   const [warnings, setWarnings] = useState([]);
@@ -56,12 +56,27 @@ function CoachTasksPage() {
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
 
-  const loadWarnings = useCallback(async () => {
+  const loadWarnings = useCallback(async ({ force = false } = {}) => {
     const activeGroups = groups.filter(group => group.hidden !== true);
+    const cacheKey = JSON.stringify({
+      user: `${user?.role || ''}:${user?.id || ''}`,
+      groups: activeGroups.map(group => ({
+        id: group.id,
+        coach: group.coach,
+        dayOfWeek: group.dayOfWeek,
+      })),
+    });
 
     if (!activeGroups.length) {
       setWarnings([]);
       setLoading(false);
+      return;
+    }
+
+    if (!force && coachTasksCache.has(cacheKey)) {
+      setWarnings(coachTasksCache.get(cacheKey));
+      setLoading(false);
+      setError('');
       return;
     }
 
@@ -194,6 +209,7 @@ function CoachTasksPage() {
 
       const nextWarnings = [...warningByKey.values()];
       nextWarnings.sort((a, b) => parseDate(b.date) - parseDate(a.date));
+      coachTasksCache.set(cacheKey, nextWarnings);
       setWarnings(nextWarnings);
     } catch (err) {
       console.error('Failed to load coach warnings:', err);
@@ -202,7 +218,7 @@ function CoachTasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [db, groups, user]);
+  }, [coachTasksCache, db, groups, user]);
 
   useEffect(() => {
     loadWarnings();
@@ -217,7 +233,7 @@ function CoachTasksPage() {
       {error ? (
         <div className="warnings-error">
           <span>{error}</span>
-          <button type="button" onClick={loadWarnings}>Try again</button>
+          <button type="button" onClick={() => loadWarnings({ force: true })}>Try again</button>
         </div>
       ) : (
         <>
@@ -239,7 +255,7 @@ function CoachTasksPage() {
             <>
               <div className="warnings-heading">
                 <span>Action needed</span>
-                <button type="button" onClick={loadWarnings}>Refresh</button>
+                <button type="button" onClick={() => loadWarnings({ force: true })}>Refresh</button>
               </div>
               <ul>
                 {warnings.map(warning => (

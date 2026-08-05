@@ -76,7 +76,16 @@ function GroupClassesPage() {
   const location = useLocation();
   const requestedAddClassDate = location.state?.addClassDate;
   const requestedCoachId = location.state?.replacementCoachId;
-  const { groups, db, coaches } = useData();
+  const {
+    groups,
+    db,
+    coaches,
+    loadPastClassDocs,
+    updateCachedClass,
+    invalidatePastClasses,
+    scheduleCache,
+    coachTasksCache,
+  } = useData();
   const { user } = useUser();
 
   const [group, setGroup] = useState(null);
@@ -142,8 +151,8 @@ function GroupClassesPage() {
       setPastClassesLoaded(false);
 
       try {
-        const snap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-        const fetched = snap.docs.map(d => {
+        const docs = await loadPastClassDocs(groupId);
+        const fetched = docs.map(d => {
           const data = d.data();
           return {
             id: d.id,
@@ -169,7 +178,7 @@ function GroupClassesPage() {
     return () => {
       active = false;
     };
-  }, [groupId, db]);
+  }, [groupId, loadPastClassDocs]);
 
   const toggleFutureDates = () => {
     if (!group) return;
@@ -212,6 +221,12 @@ function GroupClassesPage() {
           p.date === selectedDate ? { ...p, canceled: newStatus } : p
         )
       );
+      updateCachedClass(groupId, selectedDate, {
+        canceled: newStatus,
+        timestamp: Timestamp.now(),
+      });
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (err) {
       console.error('Error toggling canceled status:', err);
       alert('❌ Failed to toggle class status.');
@@ -236,21 +251,25 @@ function GroupClassesPage() {
     setIsAdding(true);
     try {
       // Create only if not exists (atomic)
+      const classData = {
+        date: formattedDate,
+        ...(newTime ? { time: newTime } : {}),
+        coach: [newCoach],
+        rent: Number(newRent),
+        canceled: Boolean(newCanceled),
+        attendanceCompleted: false,
+        timestamp: Timestamp.now(),
+      };
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         if (snap.exists()) {
           throw new Error('This class date already exists.');
         }
-        tx.set(ref, {
-          date: formattedDate,
-          ...(newTime ? { time: newTime } : {}),
-          coach: [newCoach],
-          rent: Number(newRent),
-          canceled: Boolean(newCanceled),
-          attendanceCompleted: false,
-          timestamp: Timestamp.now(),
-        });
+        tx.set(ref, classData);
       });
+      updateCachedClass(groupId, formattedDate, classData);
+      scheduleCache.clear();
+      coachTasksCache.clear();
 
       // Optionally refresh list immediately (or keep navigate)
       // Navigate back to list
@@ -335,6 +354,9 @@ function GroupClassesPage() {
 
       batch.delete(doc(db, 'groups', groupId));
       await batch.commit();
+      invalidatePastClasses(groupId);
+      scheduleCache.clear();
+      coachTasksCache.clear();
 
       alert('✅ Group deleted');
       navigate('/groups');

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
@@ -95,7 +94,16 @@ function buildLessonsByCoach(classRows) {
 
 function SalaryPage() {
   const navigate = useNavigate();
-  const { db, groups, payments, students, coaches } = useData();
+  const {
+    db,
+    groups,
+    payments,
+    students,
+    coaches,
+    pastClassesByGroup,
+    loadPastClassDocs,
+    invalidatePastClasses,
+  } = useData();
   const { user } = useUser();
   const isAdmin = user?.role === 'admin';
   const isCoach = user?.role === 'coach';
@@ -104,8 +112,8 @@ function SalaryPage() {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
+  const [loadedSummaryKey, setLoadedSummaryKey] = useState(null);
   const calculationInProgress = useRef(false);
-  const pastClassesByGroup = useRef(new Map());
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
@@ -123,18 +131,18 @@ function SalaryPage() {
   useEffect(() => {
     if (!salarySummaryStorageKey) {
       setSummary(null);
+      setLoadedSummaryKey(null);
       return;
     }
 
     setSummary(getSavedSalarySummary(salarySummaryStorageKey));
+    setLoadedSummaryKey(salarySummaryStorageKey);
   }, [salarySummaryStorageKey]);
 
   const calculateSalary = useCallback(async ({ refreshClasses = false } = {}) => {
     if (!selectedMonth || calculationInProgress.current) return;
 
-    if (refreshClasses) {
-      pastClassesByGroup.current.clear();
-    }
+    if (refreshClasses) invalidatePastClasses();
 
     calculationInProgress.current = true;
     setIsCalculating(true);
@@ -160,16 +168,7 @@ function SalaryPage() {
       let coachesTotal = 0;
 
       for (const group of groups) {
-        let pastClassDocs = pastClassesByGroup.current.get(group.id);
-
-        if (!pastClassDocs) {
-          const snap = await getDocs(collection(db, `groups/${group.id}/pastClasses`));
-          pastClassDocs = snap.docs.map(doc => ({
-            id: doc.id,
-            data: () => doc.data(),
-          }));
-          pastClassesByGroup.current.set(group.id, pastClassDocs);
-        }
+        const pastClassDocs = await loadPastClassDocs(group.id);
 
         for (const classDoc of pastClassDocs) {
           const classData = classDoc.data();
@@ -194,7 +193,7 @@ function SalaryPage() {
             groups,
             db,
             user: { role: 'admin' },
-            pastClassesByGroup: pastClassesByGroup.current,
+            pastClassesByGroup,
           });
 
           const studentCount = signedUp.length;
@@ -296,8 +295,11 @@ function SalaryPage() {
     coaches,
     db,
     groups,
+    invalidatePastClasses,
     isCoach,
+    loadPastClassDocs,
     payments,
+    pastClassesByGroup,
     salarySummaryStorageKey,
     selectedMonth,
     students,
@@ -307,6 +309,7 @@ function SalaryPage() {
   useEffect(() => {
     if (!selectedMonth || (!isAdmin && !isCoach)) return;
     if (!groups.length || !students.length || !coaches.length) return;
+    if (loadedSummaryKey !== salarySummaryStorageKey || summary) return;
 
     const refreshTimer = setTimeout(() => {
       calculateSalary();
@@ -319,9 +322,12 @@ function SalaryPage() {
     groups.length,
     isAdmin,
     isCoach,
+    loadedSummaryKey,
     payments,
+    salarySummaryStorageKey,
     selectedMonth,
     students.length,
+    summary,
   ]);
 
   if (!isAdmin && !isCoach) {

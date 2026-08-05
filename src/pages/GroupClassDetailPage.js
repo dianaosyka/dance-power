@@ -32,7 +32,18 @@ function isFutureDate(dateStr) {
 function GroupClassDetailPage() {
   const { groupId, date } = useParams();
   const navigate = useNavigate();
-  const { db, groups, payments, students, coaches } = useData();
+  const {
+    db,
+    groups,
+    payments,
+    students,
+    coaches,
+    pastClassesByGroup,
+    updateCachedClass,
+    scheduleCache,
+    replacementCache,
+    coachTasksCache,
+  } = useData();
   const { user } = useUser();
   const classRef = React.useMemo(
     () => doc(db, `groups/${groupId}/pastClasses`, date),
@@ -42,7 +53,6 @@ function GroupClassDetailPage() {
     () => doc(db, `groups/${groupId}/replacementSuggestions`, date),
     [db, groupId, date]
   );
-  const pastClassesByGroup = React.useRef(new Map());
 
   const [group, setGroup] = useState(null);
   const [signedUp, setSignedUp] = useState(undefined);
@@ -68,7 +78,14 @@ function GroupClassDetailPage() {
 
   useEffect(() => {
     const fetchClassStatus = async () => {
-      const snap = await getDoc(classRef);
+      const cached = pastClassesByGroup.get(groupId);
+      const cachedItem = cached?.find(item => item.id === date);
+      const snap = cached
+        ? {
+            exists: () => Boolean(cachedItem),
+            data: () => cachedItem?.data() || {},
+          }
+        : await getDoc(classRef);
       setClassExists(snap.exists());
       const data = snap.exists() ? snap.data() : {};
       setIsCanceled(data?.canceled === true);
@@ -85,23 +102,31 @@ function GroupClassDetailPage() {
       console.log('rent for class:', data?.rent ?? 0);
     };
     fetchClassStatus();
-  }, [classRef, date]);
+  }, [classRef, date, groupId, pastClassesByGroup]);
 
   useEffect(() => {
     if (!isFutureDate(date)) return;
     let active = true;
 
-    getDoc(replacementRef)
-      .then(snapshot => {
+    const cacheKey = `${groupId}:${date}`;
+    const request = replacementCache.has(cacheKey)
+      ? Promise.resolve(replacementCache.get(cacheKey))
+      : getDoc(replacementRef).then(snapshot => {
+          const data = snapshot.exists() ? snapshot.data() : null;
+          replacementCache.set(cacheKey, data);
+          return data;
+        });
+
+    request
+      .then(data => {
         if (!active) return;
-        const data = snapshot.exists() ? snapshot.data() : null;
         setReplacement(data);
         setReplacementCoachId(data?.suggestedCoach || '');
       })
       .catch(error => console.error('Failed to load replacement suggestion:', error));
 
     return () => { active = false; };
-  }, [date, replacementRef]);
+  }, [date, groupId, replacementCache, replacementRef]);
 
   useEffect(() => {
     const result = {};
@@ -177,7 +202,7 @@ function GroupClassDetailPage() {
         groups,
         db,
         user,
-        pastClassesByGroup: pastClassesByGroup.current,
+        pastClassesByGroup,
       });
 
       setSignedUp(matched);
@@ -197,7 +222,7 @@ function GroupClassDetailPage() {
 
       console.log('Computed earnings:', { total, forCoachesLoc, earnedLoc });
     })();
-  }, [group, groupId, date, payments, students, user, db, groups, rent, coachesThisClass]);
+  }, [group, groupId, date, payments, students, user, db, groups, rent, coachesThisClass, pastClassesByGroup]);
 
   const earnings = React.useMemo(() => {
     if (!signedUp || !Array.isArray(signedUp) || signedUp.length === 0) {
@@ -274,6 +299,8 @@ function GroupClassDetailPage() {
 
       setComment(nextComment);
       setSavedComment(nextComment);
+      updateCachedClass(groupId, date, { comment: nextComment });
+      scheduleCache.clear();
     } catch (err) {
       console.error('Failed to save comment:', err);
       alert('❌ Failed to save comment');
@@ -302,6 +329,12 @@ function GroupClassDetailPage() {
 
       await setDoc(classRef, update, { merge: true });
       setAttendanceCompleted(nextCompleted);
+      updateCachedClass(groupId, date, {
+        attendanceCompleted: nextCompleted,
+        ...(commentChanged ? { comment: nextComment } : {}),
+      });
+      scheduleCache.clear();
+      coachTasksCache.clear();
       if (commentChanged) {
         setComment(nextComment);
         setSavedComment(nextComment);
@@ -318,6 +351,9 @@ function GroupClassDetailPage() {
     if (!window.confirm(`Delete class ${date} from group ${group?.name}?`)) return;
     try {
       await deleteDoc(doc(db, `groups/${groupId}/pastClasses`, date));
+      updateCachedClass(groupId, date, {}, { remove: true });
+      scheduleCache.clear();
+      coachTasksCache.clear();
       alert('✅ Class deleted');
       navigate(`/group/${groupId}`);
     } catch (err) {
@@ -346,8 +382,12 @@ function GroupClassDetailPage() {
       }
       await Promise.all(writes);
       setReplacement({ ...nextReplacement, suggestedAt: new Date(), confirmedAt: autoConfirmed ? new Date() : null });
+      replacementCache.set(`${groupId}:${date}`, nextReplacement);
       setReplacementCoachId(coachId);
       if (autoConfirmed && classExists) setCoaches([coachId]);
+      if (autoConfirmed && classExists) updateCachedClass(groupId, date, { coach: [coachId] });
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (error) {
       console.error('Failed to suggest replacement:', error);
       alert('❌ Failed to save replacement suggestion');
@@ -370,7 +410,15 @@ function GroupClassDetailPage() {
       }
       await Promise.all(writes);
       setReplacement(current => ({ ...current, status: 'confirmed', confirmedBy: user.id }));
+      replacementCache.set(`${groupId}:${date}`, {
+        ...replacement,
+        status: 'confirmed',
+        confirmedBy: user.id,
+      });
       if (classExists) setCoaches([user.id]);
+      if (classExists) updateCachedClass(groupId, date, { coach: [user.id] });
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (error) {
       console.error('Failed to confirm replacement:', error);
       alert('❌ Failed to confirm replacement');
@@ -392,10 +440,14 @@ function GroupClassDetailPage() {
       }
       await Promise.all(writes);
       setReplacement(null);
+      replacementCache.set(`${groupId}:${date}`, null);
       setReplacementCoachId('');
       if (classExists && replacement.status === 'confirmed' && originalCoach) {
         setCoaches([originalCoach]);
+        updateCachedClass(groupId, date, { coach: [originalCoach] });
       }
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (error) {
       console.error('Failed to cancel replacement:', error);
       alert('❌ Failed to cancel replacement');
@@ -429,7 +481,15 @@ function GroupClassDetailPage() {
         confirmedBy: undefined,
         confirmedAt: undefined,
       }));
+      replacementCache.set(`${groupId}:${date}`, {
+        ...replacement,
+        status: 'denied',
+        deniedBy: user.id,
+      });
       if (classExists && originalCoach) setCoaches([originalCoach]);
+      if (classExists && originalCoach) updateCachedClass(groupId, date, { coach: [originalCoach] });
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (error) {
       console.error('Failed to deny replacement:', error);
       alert('❌ Failed to deny replacement');
@@ -444,7 +504,10 @@ function GroupClassDetailPage() {
     try {
       await deleteDoc(replacementRef);
       setReplacement(null);
+      replacementCache.set(`${groupId}:${date}`, null);
       setReplacementCoachId('');
+      scheduleCache.clear();
+      coachTasksCache.clear();
     } catch (error) {
       console.error('Failed to acknowledge denial:', error);
       alert('❌ Failed to acknowledge denial');

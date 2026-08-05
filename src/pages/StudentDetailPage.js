@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useData } from '../context/firebase';
@@ -8,7 +8,7 @@ import { getPaymentClasses, isClassUpcoming } from '../utils/paymentsUtils';
 
 function StudentDetailPage() {
   const { studentId } = useParams();
-  const { db, students, payments, groups } = useData();
+  const { db, students, payments, groups, pastClassesByGroup } = useData();
   const { user, setUser } = useUser();
   const navigate = useNavigate();
 
@@ -16,7 +16,6 @@ function StudentDetailPage() {
   const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
-  const pastClassesByGroup = useRef(new Map());
 
   const student = students.find(s => s.id === studentId);
 
@@ -83,7 +82,7 @@ function StudentDetailPage() {
           payment: currentPayment,
           groups,
           db,
-          pastClassesByGroup: pastClassesByGroup.current,
+          pastClassesByGroup,
         });
 
         if (active) {
@@ -102,7 +101,7 @@ function StudentDetailPage() {
     return () => {
       active = false;
     };
-  }, [currentPayment, groups, db]);
+  }, [currentPayment, groups, db, pastClassesByGroup]);
 
   const getAttendanceIcon = (groupId, date, groupTime) => {
     if (isClassUpcoming(date, groupTime)) return '🕒';
