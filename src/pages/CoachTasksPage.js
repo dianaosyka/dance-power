@@ -3,6 +3,7 @@ import {
   collection,
   documentId,
   getDocsFromServer,
+  or,
   query,
   Timestamp,
   where,
@@ -148,47 +149,6 @@ function CoachTasksPage() {
     if (!request) {
       const runWarningRequest = async () => {
         const requestEpoch = getReadCacheEpoch(coachTasksCache);
-        const regularCoachGroups = activeGroups.filter(group => isRegularCoach(group, user));
-
-        // A single document-ID query checks all four expected dates for each
-        // relevant group. Groups where this user is not a regular coach do not
-        // need missing-class checks; unresolved attendance is queried below.
-        const recentChecks = regularCoachGroups.map(async group => {
-          const dates = getRecentExpectedDates(group.dayOfWeek ?? 5);
-          const snapshot = await getDocsFromServer(query(
-            collection(db, `groups/${group.id}/pastClasses`),
-            where(documentId(), 'in', dates)
-          ));
-          const classesByDate = new Map(snapshot.docs.map(classDoc => {
-            const data = classDoc.data();
-            return [classDoc.id, { id: classDoc.id, ...data, date: classDoc.id }];
-          }));
-
-          return dates.map(date => ({
-            group,
-            date,
-            classItem: classesByDate.get(date) || null,
-          }));
-        });
-
-        // This query returns only unresolved documents, so old completed classes
-        // do not consume reads. Keep it across all active groups because a class
-        // may be assigned to a coach who is not the group's regular coach.
-        const incompleteChecks = activeGroups.map(async group => {
-          const snapshot = await getDocsFromServer(query(
-            collection(db, `groups/${group.id}/pastClasses`),
-            where('attendanceCompleted', '==', false)
-          ));
-          return snapshot.docs.map(classDoc => ({
-            group,
-            date: classDoc.data()?.date || classDoc.id,
-            classItem: {
-              id: classDoc.id,
-              ...classDoc.data(),
-              date: classDoc.data()?.date || classDoc.id,
-            },
-          }));
-        });
 
         // Classes created before attendance tracking was added have no boolean
         // field at all, so Firestore cannot find them with `== false`. Limit this
@@ -246,18 +206,18 @@ function CoachTasksPage() {
           return legacyEntry.rows.map(row => ({ group, ...row }));
         });
 
-        // Query only unresolved replacement requests within each known group.
-        // This works with the app's existing nested-collection permissions and
-        // does not require a collection-group composite index.
+        // Use the existing replacement query for confirmed responsibility too.
+        // This does not add another Firestore request.
         const replacementConfirmations = activeGroups.map(async group => {
           const snapshot = await getDocsFromServer(query(
             collection(db, `groups/${group.id}/replacementSuggestions`),
-            where('status', 'in', ['pending', 'denied'])
+            where('status', 'in', ['pending', 'denied', 'confirmed'])
           ));
           return snapshot.docs
             .filter(replacementDoc => {
               const data = replacementDoc.data();
               if (data?.status === 'pending') return data.suggestedCoach === user?.id;
+              if (data?.status === 'confirmed') return data.suggestedCoach === user?.id;
               const groupCoaches = Array.isArray(group.coach) ? group.coach : [group.coach];
               return data?.status === 'denied' && groupCoaches.includes(user?.id);
             })
@@ -268,15 +228,74 @@ function CoachTasksPage() {
             }));
         });
 
-        const [recentResultsByGroup, incompleteResultsByGroup, legacyResultsByGroup, replacementResultsByGroup] = await Promise.all([
-          Promise.all(recentChecks),
-          Promise.all(incompleteChecks),
+        const [legacyResultsByGroup, replacementResultsByGroup] = await Promise.all([
           Promise.all(legacyChecks),
           Promise.all(replacementConfirmations),
         ]);
+        const confirmedReplacementDatesByGroup = new Map();
+        replacementResultsByGroup.flat().forEach(({ group, date, status }) => {
+          if (status !== 'confirmed') return;
+          const dates = confirmedReplacementDatesByGroup.get(group.id) || new Set();
+          dates.add(date);
+          confirmedReplacementDatesByGroup.set(group.id, dates);
+        });
+
+        // Reuse the existing per-group incomplete-attendance query for missing
+        // class checks. For groups where this coach is responsible, the same
+        // query also returns the few recent document IDs. This replaces the old
+        // separate recent-class query instead of adding a new database read.
+        const classChecks = activeGroups.map(async group => {
+          const expectedDates = getRecentExpectedDates(group.dayOfWeek ?? 5);
+          const oldestExpectedDate = parseDate(expectedDates[expectedDates.length - 1]);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const confirmedDates = [...(confirmedReplacementDatesByGroup.get(group.id) || [])]
+            .filter(confirmedDate => {
+              const parsed = parseDate(confirmedDate);
+              return !Number.isNaN(parsed.getTime()) && parsed >= oldestExpectedDate && parsed <= today;
+            });
+          const responsibilityDates = new Set([
+            ...(isRegularCoach(group, user) ? expectedDates : []),
+            ...confirmedDates,
+          ]);
+          const filters = [where('attendanceCompleted', '==', false)];
+          if (responsibilityDates.size > 0) {
+            filters.push(where(documentId(), 'in', [...responsibilityDates]));
+          }
+          const classFilter = filters.length === 1 ? filters[0] : or(...filters);
+          const snapshot = await getDocsFromServer(query(
+            collection(db, `groups/${group.id}/pastClasses`),
+            classFilter
+          ));
+          const classRows = snapshot.docs.map(classDoc => {
+            const data = classDoc.data();
+            return {
+              group,
+              date: data?.date || classDoc.id,
+              classItem: {
+                id: classDoc.id,
+                ...data,
+                date: data?.date || classDoc.id,
+              },
+            };
+          });
+          const classesByDate = new Map(classRows.flatMap(row => [
+            [row.date, row.classItem],
+            [row.classItem.id, row.classItem],
+          ]));
+
+          return [
+            ...classRows,
+            ...[...responsibilityDates].map(responsibilityDate => ({
+              group,
+              date: responsibilityDate,
+              classItem: classesByDate.get(responsibilityDate) || null,
+            })),
+          ];
+        });
+        const classResultsByGroup = await Promise.all(classChecks);
         const results = [
-          ...recentResultsByGroup.flat(),
-          ...incompleteResultsByGroup.flat(),
+          ...classResultsByGroup.flat(),
           ...legacyResultsByGroup.flat(),
         ];
         const warningByKey = new Map();
@@ -287,7 +306,10 @@ function CoachTasksPage() {
           const regularCoach = isRegularCoach(group, user);
 
           if (!classItem) {
-            if (regularCoach) {
+            const isConfirmedReplacement = confirmedReplacementDatesByGroup
+              .get(group.id)
+              ?.has(date);
+            if (regularCoach || isConfirmedReplacement) {
               const warning = { type: 'missing', groupId: group.id, groupName: group.name, date };
               warningByKey.set(`missing-${group.id}-${date}`, warning);
             }
@@ -306,6 +328,7 @@ function CoachTasksPage() {
         });
 
         replacementResultsByGroup.flat().forEach(({ group, date, status }) => {
+          if (status === 'confirmed') return;
           const groupId = group.id;
           const type = status === 'denied' ? 'replacement-denied' : 'replacement';
           warningByKey.set(`${type}-${groupId}-${date}`, {
