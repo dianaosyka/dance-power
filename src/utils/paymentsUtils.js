@@ -1,4 +1,7 @@
-import { collection, getDocs } from 'firebase/firestore';
+// Request registries are scoped to the shared cache Map. DataProvider replaces
+// that Map when the signed-in user changes, so an old request can only populate
+// its orphaned cache and can never leak into the next user's session.
+const pastClassRequestsByCache = new WeakMap();
 
 // Helpers
 function parseDate(dateStr) {
@@ -70,22 +73,45 @@ function* generateFutureDates(
  * Returns up to `payment.type` valid class dates (past and generated future) for all groups in this payment.
  * Skips canceled, sorts by date + time, and generates missing ones.
  */
-async function getPastClassDocs({ groupId, db, pastClassesByGroup }) {
-  if (pastClassesByGroup?.has(groupId)) {
-    return pastClassesByGroup.get(groupId);
+async function getPastClassDocs({ groupId, pastClassesByGroup, loadPastClassDocs }) {
+  if (typeof loadPastClassDocs !== 'function') {
+    if (pastClassesByGroup?.has(groupId)) {
+      return pastClassesByGroup.get(groupId);
+    }
+    throw new Error('A shared past-class loader is required.');
   }
 
-  const pastSnap = await getDocs(collection(db, `groups/${groupId}/pastClasses`));
-  const docs = pastSnap.docs.map(doc => ({
-    id: doc.id,
-    data: () => doc.data(),
-  }));
+  // Always enter through the provider loader. It owns TTL/freshness decisions;
+  // returning the Map entry directly here would make a once-loaded class
+  // history live forever and bypass deletion reconciliation.
+  if (!pastClassesByGroup) {
+    return loadPastClassDocs(groupId);
+  }
+  let requests = pastClassRequestsByCache.get(pastClassesByGroup);
+  if (!requests) {
+    requests = new Map();
+    pastClassRequestsByCache.set(pastClassesByGroup, requests);
+  }
+  let request = requests.get(groupId);
+  if (!request) {
+    request = loadPastClassDocs(groupId)
+      .then(docs => {
+        pastClassesByGroup?.set(groupId, docs);
+        return docs;
+      })
+      .finally(() => requests.delete(groupId));
+    requests.set(groupId, request);
+  }
 
-  pastClassesByGroup?.set(groupId, docs);
-  return docs;
+  return request;
 }
 
-export async function getPaymentClasses({ payment, groups, db, pastClassesByGroup }) {
+export async function getPaymentClasses({
+  payment,
+  groups,
+  pastClassesByGroup,
+  loadPastClassDocs,
+}) {
   if (!payment || !payment.dateFrom || !Array.isArray(payment.groups)) return [];
 
   const [dd, mm, yyyy] = payment.dateFrom.split('.').map(Number);
@@ -99,7 +125,11 @@ export async function getPaymentClasses({ payment, groups, db, pastClassesByGrou
     const group = groups.find(g => g.id === groupId);
     if (!group) continue;
 
-    const pastClassDocs = await getPastClassDocs({ groupId, db, pastClassesByGroup });
+    const pastClassDocs = await getPastClassDocs({
+      groupId,
+      pastClassesByGroup,
+      loadPastClassDocs,
+    });
     for (const pastClassDoc of pastClassDocs) {
       const d = pastClassDoc.data();
       if (d.canceled) continue;
@@ -215,9 +245,9 @@ export async function getPaymentClasses({ payment, groups, db, pastClassesByGrou
  * @param {Array}  params.students        // [{id, name, lastPaymentId, groups, ...}]
  * @param {Array}  params.payments        // [{id, studentId?, status, groups, amount, type, ...}]
  * @param {Array}  params.groups
- * @param {Object} params.db
  * @param {Object} params.user            // {role: 'coach' | ...}
  * @param {Map}    params.pastClassesByGroup // optional groupId -> past class docs cache
+ * @param {Function} params.loadPastClassDocs // shared, generation-aware loader
  * @returns {Promise<Array<{id: string, name: string, amount: string}>>}
  */
 export async function getClassSignedStudentsByPayments({
@@ -226,9 +256,9 @@ export async function getClassSignedStudentsByPayments({
   students,
   payments,
   groups,
-  db,
   user,
   pastClassesByGroup,
+  loadPastClassDocs,
 }) {
   const result = [];
   const classCache = pastClassesByGroup || new Map();
@@ -265,8 +295,8 @@ export async function getClassSignedStudentsByPayments({
     const paymentClasses = await getPaymentClasses({
       payment,
       groups,
-      db,
       pastClassesByGroup: classCache,
+      loadPastClassDocs,
     });
     const coversClass = paymentClasses?.some(
       c => c.groupId === groupId && c.date === date

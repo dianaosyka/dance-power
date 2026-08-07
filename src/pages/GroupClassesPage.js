@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   collection,
-  getDocs,
+  getDocsFromServer,
   doc,
   runTransaction,
   Timestamp,
   writeBatch,
   arrayRemove,
+  query,
+  where,
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { invalidateReadCache } from '../utils/readCacheEpoch';
 import './GroupClassesPage.css';
 
 function getNextFutureDates(startFrom, weekday, count) {
@@ -55,6 +59,118 @@ function toDateInputValue(dateStr) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function mapPastClassDocs(docs) {
+  return docs
+    .map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        date: data?.date || d.id,
+      };
+    })
+    .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
+}
+
+const MAX_ATOMIC_BATCH_OPERATIONS = 500;
+const SAFE_BATCH_CHUNK_SIZE = 450;
+const MAX_GROUP_DELETION_RECONCILIATION_PASSES = 5;
+
+async function readGroupCleanupOperations(db, groupId) {
+  const pastClassesRef = collection(db, `groups/${groupId}/pastClasses`);
+  const affectedStudentsQuery = query(
+    collection(db, 'students'),
+    where('groups', 'array-contains', groupId)
+  );
+  const affectedPaymentsQuery = query(
+    collection(db, 'payments'),
+    where('groups', 'array-contains', groupId)
+  );
+  const [pastClassesSnap, studentsSnap, paymentsSnap] = await Promise.all([
+    getDocsFromServer(pastClassesRef),
+    getDocsFromServer(affectedStudentsQuery),
+    getDocsFromServer(affectedPaymentsQuery),
+  ]);
+
+  const cleanupOperations = [];
+  pastClassesSnap.forEach((classDoc) => {
+    cleanupOperations.push(batch => batch.delete(classDoc.ref));
+  });
+  studentsSnap.forEach((studentDoc) => {
+    cleanupOperations.push(batch => batch.update(studentDoc.ref, {
+      groups: arrayRemove(groupId),
+    }));
+  });
+  paymentsSnap.forEach((paymentDoc) => {
+    cleanupOperations.push(batch => batch.update(paymentDoc.ref, {
+      groups: arrayRemove(groupId),
+    }));
+  });
+
+  return cleanupOperations;
+}
+
+async function commitCleanupChunks(db, cleanupOperations, onChunkCommitted) {
+  for (let index = 0; index < cleanupOperations.length; index += SAFE_BATCH_CHUNK_SIZE) {
+    const operations = cleanupOperations.slice(index, index + SAFE_BATCH_CHUNK_SIZE);
+    const batch = writeBatch(db);
+    operations.forEach(applyOperation => applyOperation(batch));
+    await batch.commit();
+    onChunkCommitted(operations.length);
+  }
+}
+
+async function commitGroupDeletion(db, groupId, cleanupOperations, groupRef) {
+  if (cleanupOperations.length + 1 <= MAX_ATOMIC_BATCH_OPERATIONS) {
+    const batch = writeBatch(db);
+    cleanupOperations.forEach(applyOperation => applyOperation(batch));
+    batch.delete(groupRef);
+    await batch.commit();
+    return;
+  }
+
+  // A cleanup larger than Firestore's atomic batch limit necessarily spans
+  // commits. Keep the group document until fresh server queries find a final
+  // set small enough to clean up atomically with the group deletion. This also
+  // catches references/classes created while an earlier chunk was committing.
+  let committedCleanupOperations = 0;
+  const recordCommittedOperations = committedCount => {
+    committedCleanupOperations += committedCount;
+  };
+
+  try {
+    await commitCleanupChunks(db, cleanupOperations, recordCommittedOperations);
+
+    for (
+      let pass = 0;
+      pass < MAX_GROUP_DELETION_RECONCILIATION_PASSES;
+      pass += 1
+    ) {
+      const remainingOperations = await readGroupCleanupOperations(db, groupId);
+
+      if (remainingOperations.length + 1 <= MAX_ATOMIC_BATCH_OPERATIONS) {
+        const finalBatch = writeBatch(db);
+        remainingOperations.forEach(applyOperation => applyOperation(finalBatch));
+        finalBatch.delete(groupRef);
+        await finalBatch.commit();
+        return;
+      }
+
+      await commitCleanupChunks(db, remainingOperations, recordCommittedOperations);
+    }
+
+    throw new Error(
+      'The group kept receiving new references while deletion was running.'
+    );
+  } catch (error) {
+    const deletionError = new Error(error?.message || String(error));
+    deletionError.cause = error;
+    deletionError.partialCleanupCommitted = committedCleanupOperations > 0;
+    deletionError.committedCleanupOperations = committedCleanupOperations;
+    throw deletionError;
+  }
+}
+
 // Only inspect a short recent window. This catches forgotten lessons without
 // making old data from before the app was introduced appear as unfinished.
 function getRecentExpectedDates(weekday, count = 4) {
@@ -85,12 +201,15 @@ function GroupClassesPage() {
     invalidatePastClasses,
     scheduleCache,
     coachTasksCache,
+    removeGroupFromCachedRecords,
   } = useData();
   const { user } = useUser();
 
   const [group, setGroup] = useState(null);
   const [pastDates, setPastDates] = useState([]);
   const [pastClassesLoaded, setPastClassesLoaded] = useState(false);
+  const [pastClassesLoading, setPastClassesLoading] = useState(false);
+  const [pastClassesError, setPastClassesError] = useState('');
   const [futureDates, setFutureDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -107,6 +226,9 @@ function GroupClassesPage() {
   const [isToggling, setIsToggling] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const pastClassLoadGeneration = useRef(0);
+  const groupDeletionInProgress = useRef(false);
+  const canManageClasses = user?.role === 'admin' || user?.role === 'coach';
 
   const warnings = useMemo(() => {
     if (!group || group.hidden === true || !pastClassesLoaded) return [];
@@ -145,31 +267,33 @@ function GroupClassesPage() {
 
   useEffect(() => {
     let active = true;
+    const generation = pastClassLoadGeneration.current + 1;
+    pastClassLoadGeneration.current = generation;
 
     const fetchPastClasses = async () => {
       if (!groupId) return;
       setPastClassesLoaded(false);
+      setPastClassesLoading(true);
+      setPastClassesError('');
+      setPastDates([]);
 
       try {
         const docs = await loadPastClassDocs(groupId);
-        const fetched = docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            ...data,
-            date: data?.date || d.id,
-          };
-        });
-        fetched.sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
-        if (active) {
+        const fetched = mapPastClassDocs(docs);
+        if (active && pastClassLoadGeneration.current === generation) {
           setPastDates(fetched);
           setPastClassesLoaded(true);
         }
       } catch (err) {
         console.error('Failed to load classes:', err);
-        if (active) {
+        if (active && pastClassLoadGeneration.current === generation) {
           setPastDates([]);
           setPastClassesLoaded(false);
+          setPastClassesError('Classes could not be loaded. Please try again.');
+        }
+      } finally {
+        if (active && pastClassLoadGeneration.current === generation) {
+          setPastClassesLoading(false);
         }
       }
     };
@@ -177,8 +301,33 @@ function GroupClassesPage() {
     fetchPastClasses();
     return () => {
       active = false;
+      pastClassLoadGeneration.current += 1;
     };
   }, [groupId, loadPastClassDocs]);
+
+  const handleRefreshPastClasses = async () => {
+    if (!groupId || pastClassesLoading) return;
+
+    const generation = pastClassLoadGeneration.current + 1;
+    pastClassLoadGeneration.current = generation;
+    setPastClassesLoading(true);
+    setPastClassesError('');
+    try {
+      const docs = await loadPastClassDocs(groupId, { force: true });
+      if (pastClassLoadGeneration.current !== generation) return;
+      setPastDates(mapPastClassDocs(docs));
+      setPastClassesLoaded(true);
+    } catch (err) {
+      console.error('Failed to refresh classes:', err);
+      if (pastClassLoadGeneration.current !== generation) return;
+      setPastClassesError('Classes could not be refreshed. Please try again.');
+      alert('❌ Failed to refresh classes');
+    } finally {
+      if (pastClassLoadGeneration.current === generation) {
+        setPastClassesLoading(false);
+      }
+    }
+  };
 
   const toggleFutureDates = () => {
     if (!group) return;
@@ -195,7 +344,7 @@ function GroupClassesPage() {
   };
 
   const handleToggleCancel = async () => {
-    if (!selectedDate || !groupId || isToggling) return;
+    if (!canManageClasses || !selectedDate || !groupId || isToggling) return;
 
     setIsToggling(true);
     const ref = doc(db, `groups/${groupId}/pastClasses`, selectedDate);
@@ -225,8 +374,9 @@ function GroupClassesPage() {
         canceled: newStatus,
         timestamp: Timestamp.now(),
       });
-      scheduleCache.clear();
-      coachTasksCache.clear();
+      invalidateReadCache(scheduleCache);
+      invalidateReadCache(coachTasksCache);
+      invalidateSalarySummaries();
     } catch (err) {
       console.error('Error toggling canceled status:', err);
       alert('❌ Failed to toggle class status.');
@@ -238,7 +388,7 @@ function GroupClassesPage() {
   };
 
   const handleAddClass = async () => {
-    if (isAdding) return;
+    if (!canManageClasses || isAdding) return;
     if (!groupId || !newDate || !newCoach) {
       alert('Please fill in all fields');
       return;
@@ -268,8 +418,9 @@ function GroupClassesPage() {
         tx.set(ref, classData);
       });
       updateCachedClass(groupId, formattedDate, classData);
-      scheduleCache.clear();
-      coachTasksCache.clear();
+      invalidateReadCache(scheduleCache);
+      invalidateReadCache(coachTasksCache);
+      invalidateSalarySummaries();
 
       // Optionally refresh list immediately (or keep navigate)
       // Navigate back to list
@@ -306,7 +457,13 @@ function GroupClassesPage() {
   }, [group, requestedAddClassDate, requestedCoachId]);
 
   const handleDeleteGroup = async () => {
-    if (!groupId || !group || isDeletingGroup) return;
+    if (
+      user?.role !== 'admin' ||
+      !groupId ||
+      !group ||
+      isDeletingGroup ||
+      groupDeletionInProgress.current
+    ) return;
 
     if (!window.confirm(`Delete group ${group.name}? This will also delete all past classes.`)) {
       return;
@@ -318,52 +475,47 @@ function GroupClassesPage() {
       return;
     }
 
+    groupDeletionInProgress.current = true;
     setIsDeletingGroup(true);
 
     try {
-      const pastClassesRef = collection(db, `groups/${groupId}/pastClasses`);
-      const [pastClassesSnap, studentsSnap, paymentsSnap] = await Promise.all([
-        getDocs(pastClassesRef),
-        getDocs(collection(db, 'students')),
-        getDocs(collection(db, 'payments')),
-      ]);
+      const cleanupOperations = await readGroupCleanupOperations(db, groupId);
 
-      const batch = writeBatch(db);
-
-      pastClassesSnap.forEach((classDoc) => {
-        batch.delete(classDoc.ref);
-      });
-
-      studentsSnap.forEach((studentDoc) => {
-        const studentGroups = studentDoc.data()?.groups || [];
-        if (studentGroups.includes(groupId)) {
-          batch.update(studentDoc.ref, {
-            groups: arrayRemove(groupId),
-          });
-        }
-      });
-
-      paymentsSnap.forEach((paymentDoc) => {
-        const paymentGroups = paymentDoc.data()?.groups || [];
-        if (paymentGroups.includes(groupId)) {
-          batch.update(paymentDoc.ref, {
-            groups: arrayRemove(groupId),
-          });
-        }
-      });
-
-      batch.delete(doc(db, 'groups', groupId));
-      await batch.commit();
-      invalidatePastClasses(groupId);
-      scheduleCache.clear();
-      coachTasksCache.clear();
+      await commitGroupDeletion(
+        db,
+        groupId,
+        cleanupOperations,
+        doc(db, 'groups', groupId)
+      );
+      removeGroupFromCachedRecords(groupId);
+      invalidateSalarySummaries();
 
       alert('✅ Group deleted');
       navigate('/groups');
     } catch (err) {
       console.error('Error deleting group:', err);
-      alert('❌ Failed to delete group');
+      // A failed multi-batch deletion can still have committed some cleanup
+      // writes. Drop derived caches so those writes are never hidden behind a
+      // locally "fresh" class/task/salary result.
+      invalidatePastClasses(groupId);
+      invalidateReadCache(scheduleCache);
+      invalidateReadCache(coachTasksCache);
+      invalidateSalarySummaries();
+      if (err?.partialCleanupCommitted) {
+        alert(
+          `❌ Group deletion stopped after ${err.committedCleanupOperations} cleanup ` +
+          'updates/deletions were already committed. This client could not confirm the ' +
+          'final group deletion, so some class records or group links may already ' +
+          'be removed. Refresh, verify the group, and retry to finish reconciliation.'
+        );
+      } else {
+        alert(
+          '❌ Group deletion failed before this client confirmed any cleanup write. ' +
+          'Refresh to verify the current server state before retrying.'
+        );
+      }
     } finally {
+      groupDeletionInProgress.current = false;
       setIsDeletingGroup(false);
     }
   };
@@ -391,6 +543,15 @@ function GroupClassesPage() {
       <button className="add-cancel-button" onClick={toggleFutureDates}>
         {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
       </button>
+      <button
+        type="button"
+        className="add-cancel-button"
+        onClick={handleRefreshPastClasses}
+        disabled={pastClassesLoading}
+      >
+        {pastClassesLoading ? 'Refreshing classes...' : 'Refresh classes'}
+      </button>
+      {pastClassesError && <p role="alert">{pastClassesError}</p>}
 
       {warnings.length > 0 && (user?.role === 'admin' || user?.role === 'coach') && (
         <section className="class-warnings" aria-label="Class warnings">
@@ -458,18 +619,26 @@ function GroupClassesPage() {
       </div>
 
       <ul className="class-list">
+        {pastClassesLoaded && pastDates.length === 0 && (
+          <li className="class-item">No recorded classes.</li>
+        )}
         {pastDates.map(past => (
           <li key={past.date} className="class-item">
             <span>{past.date}</span>
             <span
               className="check"
               onClick={() => {
-                if (isToggling) return;
+                if (!canManageClasses || isToggling) return;
                 setSelectedDate(past.date);
                 setShowModal(true);
               }}
-              title={isToggling ? 'Working…' : (past.canceled ? 'Uncancel' : 'Cancel')}
-              style={{ opacity: isToggling ? 0.6 : 1, pointerEvents: isToggling ? 'none' : 'auto' }}
+              title={canManageClasses
+                ? isToggling ? 'Working…' : (past.canceled ? 'Uncancel' : 'Cancel')
+                : 'Class status'}
+              style={{
+                opacity: isToggling ? 0.6 : 1,
+                pointerEvents: canManageClasses && !isToggling ? 'auto' : 'none',
+              }}
             >
               {past.canceled ? '❌' : isAttendanceComplete(past) ? '✅' : '⚠️'}
             </span>
@@ -486,14 +655,16 @@ function GroupClassesPage() {
         ))}
       </ul>
       <br></br><br></br>
-      <button
-        className="delete-group-button"
-        onClick={handleDeleteGroup}
-        disabled={isDeletingGroup}
-        title={isDeletingGroup ? 'Deleting group…' : 'Delete group'}
-      >
-        {isDeletingGroup ? 'Deleting group…' : 'DELETE GROUP'}
-      </button>
+      {user?.role === 'admin' && (
+        <button
+          className="delete-group-button"
+          onClick={handleDeleteGroup}
+          disabled={isDeletingGroup}
+          title={isDeletingGroup ? 'Deleting group…' : 'Delete group'}
+        >
+          {isDeletingGroup ? 'Deleting group…' : 'DELETE GROUP'}
+        </button>
+      )}
 
       {showModal && (
         <div className="modal-overlay">

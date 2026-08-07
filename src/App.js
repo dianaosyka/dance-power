@@ -38,7 +38,10 @@ function AppRoutes() {
       />
       <Route path="/groups" element={<GroupsPage />} />
       <Route path="/students" element={<StudentsListPage />} />
-      <Route path="/add-payment" element={<AddPaymentPage />} />
+      <Route
+        path="/add-payment"
+        element={user.role === 'admin' ? <AddPaymentPage /> : <Navigate to="/" replace />}
+      />
       <Route path="/group/:groupId" element={<GroupClassesPage />} />
       <Route path="/student/:studentId" element={<StudentDetailPage />} />
       <Route path="/group/:groupId/class/:date" element={<GroupClassDetailPage />} />
@@ -53,11 +56,11 @@ function AppRoutes() {
 function App() {
   return (
     <UserProvider>
-      <DataProvider>
-        <Router>
+      <Router>
+        <DataProvider>
           <AppRoutes />
-        </Router>
-      </DataProvider>
+        </DataProvider>
+      </Router>
     </UserProvider>
   );
 }

@@ -1,10 +1,4 @@
 import { getPaymentClasses, isClassUpcoming } from './paymentsUtils';
-import { getDocs } from 'firebase/firestore';
-
-jest.mock('firebase/firestore', () => ({
-  collection: jest.fn((db, path) => ({ db, path })),
-  getDocs: jest.fn(),
-}));
 
 describe('isClassUpcoming', () => {
   it('keeps a class later today upcoming', () => {
@@ -27,16 +21,17 @@ describe('isClassUpcoming', () => {
 });
 
 describe('getPaymentClasses caching', () => {
-  beforeEach(() => {
-    getDocs.mockReset();
-  });
-
-  it('reuses a supplied group-history cache across calculations', async () => {
-    getDocs.mockResolvedValue({
-      docs: [{
+  it('delegates cache freshness to the shared loader across calculations', async () => {
+    const fetchPastClassDocs = jest.fn().mockResolvedValue([
+      {
         id: '04.08.2026',
         data: () => ({ date: '04.08.2026', canceled: false }),
-      }],
+      },
+    ]);
+    let cachedDocs;
+    const loadPastClassDocs = jest.fn(async () => {
+      if (!cachedDocs) cachedDocs = await fetchPastClassDocs();
+      return cachedDocs;
     });
 
     const params = {
@@ -51,14 +46,52 @@ describe('getPaymentClasses caching', () => {
         dayOfWeek: 2,
         time: '18:00',
       }],
-      db: {},
       pastClassesByGroup: new Map(),
+      loadPastClassDocs,
     };
 
     const firstResult = await getPaymentClasses(params);
     const secondResult = await getPaymentClasses(params);
 
     expect(firstResult).toEqual(secondResult);
-    expect(getDocs).toHaveBeenCalledTimes(1);
+    expect(loadPastClassDocs).toHaveBeenCalledTimes(2);
+    expect(fetchPastClassDocs).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces concurrent cold reads for the same group', async () => {
+    let resolveDocs;
+    const loadPastClassDocs = jest.fn().mockReturnValue(new Promise(resolve => {
+      resolveDocs = resolve;
+    }));
+
+    const params = {
+      payment: {
+        dateFrom: '01.08.2026',
+        groups: ['group-1'],
+        type: 1,
+      },
+      groups: [{
+        id: 'group-1',
+        name: 'Tuesday class',
+        dayOfWeek: 2,
+        time: '18:00',
+      }],
+      pastClassesByGroup: new Map(),
+      loadPastClassDocs,
+    };
+
+    const firstResult = getPaymentClasses(params);
+    const secondResult = getPaymentClasses(params);
+
+    expect(loadPastClassDocs).toHaveBeenCalledTimes(1);
+    resolveDocs([
+      {
+        id: '04.08.2026',
+        data: () => ({ date: '04.08.2026', canceled: false }),
+      },
+    ]);
+
+    await expect(firstResult).resolves.toEqual(await secondResult);
+    expect(loadPastClassDocs).toHaveBeenCalledTimes(1);
   });
 });

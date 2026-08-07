@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useData } from '../context/firebase';
 import {
   collection,
@@ -8,6 +8,7 @@ import {
   writeBatch, // <-- atomic writes
 } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { invalidateSalarySummaries } from '../utils/salaryCache';
 import './AddPaymentPage.css';
 
 function formatDate(dateStr) {
@@ -19,7 +20,17 @@ function formatDate(dateStr) {
 }
 
 function AddPaymentPage() {
-  const { students, groups, db } = useData();
+  const {
+    students,
+    groups,
+    db,
+    studentsLoaded,
+    studentsLoading,
+    studentsError,
+    refreshStudents,
+    upsertPayment,
+    patchStudent,
+  } = useData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -34,6 +45,8 @@ function AddPaymentPage() {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false); // <-- prevent double-clicks
   const [errors, setErrors] = useState({});
+  const appliedPrefillQuery = useRef(null);
+  const submissionInProgress = useRef(false);
 
   const clearError = (field) => {
     setErrors(current => {
@@ -45,7 +58,7 @@ function AddPaymentPage() {
   };
 
   const filteredStudents = students.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase())
+    String(s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
   const sortedGroups = groups
     .filter(group => group.hidden !== true)
@@ -58,21 +71,40 @@ function AddPaymentPage() {
     );
   };
 
-  // Prefill student from ?studentName=...
+  // Prefer the stable student ID, while retaining support for older name links.
   useEffect(() => {
+    if (!studentsLoaded || appliedPrefillQuery.current === location.search) return;
+
     const params = new URLSearchParams(location.search);
+    const studentIdFromURL = params.get('studentId');
     const nameFromURL = params.get('studentName');
-    if (nameFromURL) {
+    appliedPrefillQuery.current = location.search;
+
+    if (!studentIdFromURL && !nameFromURL) return;
+
+    const match = studentIdFromURL
+      ? students.find(s => s.id === studentIdFromURL)
+      : students.find(s => s.name === nameFromURL);
+
+    if (match) {
+      setSearchTerm(match.name);
+      setSelectedStudent(match);
+    } else if (nameFromURL) {
       setSearchTerm(nameFromURL);
-      const match = students.find(s => s.name === nameFromURL);
-      if (match) {
-        setSelectedStudent(match);
-      }
     }
-  }, [students, location.search]);
+  }, [students, studentsLoaded, location.search]);
+
+  const handleRefreshStudents = async () => {
+    try {
+      await refreshStudents();
+    } catch (err) {
+      // The context keeps the user-facing error for the status message below.
+      console.error('Failed to refresh students for payment form:', err);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return; // block double-clicks
+    if (submissionInProgress.current || !studentsLoaded || studentsLoading) return;
 
     const nextErrors = {};
     if (!selectedStudent) nextErrors.student = 'Select a student from the list.';
@@ -100,6 +132,7 @@ function AddPaymentPage() {
       return;
     }
 
+    submissionInProgress.current = true;
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
@@ -129,6 +162,13 @@ function AddPaymentPage() {
 
       await batch.commit(); // all-or-nothing
 
+      upsertPayment({ id: paymentRef.id, ...paymentData });
+      patchStudent(selectedStudent.id, currentStudent => ({
+        groups: [...new Set([...(currentStudent.groups || []), ...selectedGroups])],
+        lastPaymentId: paymentRef.id,
+      }));
+      invalidateSalarySummaries();
+
       // Reset form
       setSearchTerm('');
       setSelectedStudent(null);
@@ -147,6 +187,7 @@ function AddPaymentPage() {
       console.error(err);
       alert('❌ Error saving payment. Nothing was saved.');
     } finally {
+      submissionInProgress.current = false;
       setIsSubmitting(false);
     }
   };
@@ -154,6 +195,23 @@ function AddPaymentPage() {
   return (
     <div className="add-payment-page">
       <h2 className="title">ADD A PAYMENT</h2>
+
+      <div role="status" style={{ textAlign: 'center', marginBottom: '12px' }}>
+        {studentsLoading && !studentsLoaded && <p>Loading students...</p>}
+        {studentsError && <p>Could not load students: {studentsError}</p>}
+        {studentsError && (
+          <button
+            type="button"
+            onClick={handleRefreshStudents}
+            disabled={studentsLoading}
+          >
+            {studentsLoading ? 'Retrying...' : 'Retry students'}
+          </button>
+        )}
+        {studentsLoaded && students.length === 0 && !studentsError && (
+          <p>No students are available.</p>
+        )}
+      </div>
 
       <div className={`form-row ${selectedStudent ? 'required-filled' : 'required-empty'}`}>
         <label>WHO:</label>
@@ -166,6 +224,7 @@ function AddPaymentPage() {
           }}
           className="input"
           aria-invalid={Boolean(errors.student)}
+          disabled={!studentsLoaded || studentsLoading || isSubmitting}
         />
         {searchTerm && !selectedStudent && (
           <ul className="dropdown">
@@ -291,10 +350,16 @@ function AddPaymentPage() {
       <button
         className="confirm-button"
         onClick={handleSubmit}
-        disabled={isSubmitting}
-        title={isSubmitting ? 'Saving…' : 'Save payment'}
+        disabled={isSubmitting || !studentsLoaded || studentsLoading}
+        title={
+          isSubmitting
+            ? 'Saving…'
+            : !studentsLoaded || studentsLoading
+              ? 'Wait for students to load'
+              : 'Save payment'
+        }
       >
-        {isSubmitting ? 'Saving…' : '✅'}
+        {isSubmitting ? 'Saving…' : studentsLoading ? 'Loading…' : '✅'}
       </button>
     </div>
   );

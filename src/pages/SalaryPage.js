@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useData } from '../context/firebase';
+import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import { getCoachPayForClass, getCoachRatePerPerson } from '../utils/coachSalaryUtils';
@@ -18,20 +18,29 @@ function getSavedMonthValue() {
 function getSalarySummaryStorageKey(user, monthValue) {
   if (!user?.role || !monthValue) return null;
 
-  const userKey = user.role === 'coach' ? user.id : user.role;
+  const userKey = user.id || user.role;
   return `salarySummary:${user.role}:${userKey}:${monthValue}`;
 }
 
 function getSavedSalarySummary(storageKey) {
-  if (!storageKey) return null;
+  if (!storageKey) return { summary: null, isStale: false };
 
   try {
     const savedSummary = localStorage.getItem(storageKey);
-    return savedSummary ? JSON.parse(savedSummary) : null;
+    if (!savedSummary) return { summary: null, isStale: false };
+
+    const summary = JSON.parse(savedSummary);
+    const generatedAt = Number(summary?.generatedAt);
+    return {
+      summary,
+      isStale:
+        !Number.isFinite(generatedAt) ||
+        Date.now() - generatedAt >= STAFF_DATA_CACHE_TTL_MS,
+    };
   } catch (err) {
     console.error('Failed to load saved salary summary:', err);
     localStorage.removeItem(storageKey);
-    return null;
+    return { summary: null, isStale: false };
   }
 }
 
@@ -95,11 +104,24 @@ function buildLessonsByCoach(classRows) {
 function SalaryPage() {
   const navigate = useNavigate();
   const {
-    db,
     groups,
     payments,
     students,
     coaches,
+    groupsLoaded,
+    coachesLoaded,
+    groupsError,
+    coachesError,
+    studentsLoaded,
+    paymentsLoaded,
+    studentsLoading,
+    paymentsLoading,
+    studentsError,
+    paymentsError,
+    studentsLastLoadedAt,
+    paymentsLastLoadedAt,
+    refreshStudents,
+    refreshPayments,
     pastClassesByGroup,
     loadPastClassDocs,
     invalidatePastClasses,
@@ -109,11 +131,13 @@ function SalaryPage() {
   const isCoach = user?.role === 'coach';
   const [selectedMonth, setSelectedMonth] = useState(getSavedMonthValue);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
   const [summary, setSummary] = useState(null);
+  const [summaryIsStale, setSummaryIsStale] = useState(false);
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
-  const [loadedSummaryKey, setLoadedSummaryKey] = useState(null);
   const calculationInProgress = useRef(false);
+  const calculationToken = useRef(0);
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
@@ -123,32 +147,83 @@ function SalaryPage() {
     () => getSalarySummaryStorageKey(user, selectedMonth),
     [user, selectedMonth]
   );
+  const activeSalaryKey = useRef(salarySummaryStorageKey);
+  activeSalaryKey.current = salarySummaryStorageKey;
+
+  useEffect(() => () => {
+    calculationToken.current += 1;
+    calculationInProgress.current = false;
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('salarySelectedMonth', selectedMonth);
   }, [selectedMonth]);
 
   useEffect(() => {
+    const generatedAt = Number(summary?.generatedAt);
+    if (
+      !Number.isFinite(generatedAt) ||
+      STAFF_DATA_CACHE_TTL_MS <= 0
+    ) return undefined;
+
+    const remaining = STAFF_DATA_CACHE_TTL_MS - (Date.now() - generatedAt);
+    if (remaining <= 0) {
+      setSummaryIsStale(true);
+      return undefined;
+    }
+
+    const timer = setTimeout(
+      () => setSummaryIsStale(true),
+      Math.min(remaining, 2_147_483_647)
+    );
+    return () => clearTimeout(timer);
+  }, [summary?.generatedAt]);
+
+  useEffect(() => {
+    // Invalidate any calculation still running for a previous month/account.
+    calculationToken.current += 1;
+    calculationInProgress.current = false;
+    setIsCalculating(false);
+
     if (!salarySummaryStorageKey) {
       setSummary(null);
-      setLoadedSummaryKey(null);
+      setSummaryIsStale(false);
       return;
     }
 
-    setSummary(getSavedSalarySummary(salarySummaryStorageKey));
-    setLoadedSummaryKey(salarySummaryStorageKey);
+    const saved = getSavedSalarySummary(salarySummaryStorageKey);
+    setSummary(saved.summary);
+    setSummaryIsStale(saved.isStale);
   }, [salarySummaryStorageKey]);
 
-  const calculateSalary = useCallback(async ({ refreshClasses = false } = {}) => {
-    if (!selectedMonth || calculationInProgress.current) return;
+  const calculateSalary = useCallback(async ({
+    refreshClasses = false,
+    studentsOverride,
+    paymentsOverride,
+  } = {}) => {
+    const hasStudents = studentsOverride !== undefined || studentsLoaded;
+    const hasPayments = paymentsOverride !== undefined || paymentsLoaded;
+    if (
+      !selectedMonth ||
+      !groupsLoaded ||
+      !coachesLoaded ||
+      !hasStudents ||
+      !hasPayments ||
+      calculationInProgress.current
+    ) return;
 
     if (refreshClasses) invalidatePastClasses();
 
+    const runToken = ++calculationToken.current;
+    const runSalaryKey = salarySummaryStorageKey;
+    const runMonth = selectedMonth;
     calculationInProgress.current = true;
     setIsCalculating(true);
     setError('');
 
     try {
+      const calculationStudents = studentsOverride ?? students;
+      const calculationPayments = paymentsOverride ?? payments;
       const coachTotals = new Map(
         (coaches || []).map(coach => [
           coach.id,
@@ -174,7 +249,7 @@ function SalaryPage() {
           const classData = classDoc.data();
           const date = classData?.date || classDoc.id;
 
-          if (!isClassInMonth(date, selectedMonth) || classData?.canceled === true) {
+          if (!isClassInMonth(date, runMonth) || classData?.canceled === true) {
             continue;
           }
 
@@ -188,12 +263,12 @@ function SalaryPage() {
           const signedUp = await getClassSignedStudentsByPayments({
             groupId: group.id,
             date,
-            students,
-            payments,
+            students: calculationStudents,
+            payments: calculationPayments,
             groups,
-            db,
             user: { role: 'admin' },
             pastClassesByGroup,
+            loadPastClassDocs,
           });
 
           const studentCount = signedUp.length;
@@ -268,6 +343,7 @@ function SalaryPage() {
       };
 
       const nextSummary = {
+        generatedAt: Date.now(),
         grossTotal,
         rentTotal,
         coachesTotal,
@@ -278,23 +354,39 @@ function SalaryPage() {
         lessonsByCoach: visibleLessonsByCoach,
       };
 
-      setSummary(nextSummary);
+      if (
+        calculationToken.current !== runToken ||
+        activeSalaryKey.current !== runSalaryKey
+      ) {
+        return;
+      }
 
-      if (salarySummaryStorageKey) {
-        localStorage.setItem(salarySummaryStorageKey, JSON.stringify(nextSummary));
+      setSummary(nextSummary);
+      setSummaryIsStale(false);
+
+      if (runSalaryKey) {
+        localStorage.setItem(runSalaryKey, JSON.stringify(nextSummary));
       }
     } catch (err) {
       console.error('Failed to calculate salary:', err);
-      setError('Failed to calculate salary. Check console for details.');
+      if (
+        calculationToken.current === runToken &&
+        activeSalaryKey.current === runSalaryKey
+      ) {
+        setError('Failed to calculate salary. Check console for details.');
+      }
     } finally {
-      calculationInProgress.current = false;
-      setIsCalculating(false);
+      if (calculationToken.current === runToken) {
+        calculationInProgress.current = false;
+        setIsCalculating(false);
+      }
     }
   }, [
     coachNames,
     coaches,
-    db,
     groups,
+    groupsLoaded,
+    coachesLoaded,
     invalidatePastClasses,
     isCoach,
     loadPastClassDocs,
@@ -303,32 +395,58 @@ function SalaryPage() {
     salarySummaryStorageKey,
     selectedMonth,
     students,
+    studentsLoaded,
+    paymentsLoaded,
     user,
   ]);
 
-  useEffect(() => {
-    if (!selectedMonth || (!isAdmin && !isCoach)) return;
-    if (!groups.length || !students.length || !coaches.length) return;
-    if (loadedSummaryKey !== salarySummaryStorageKey || summary) return;
+  const handleSalaryAction = async () => {
+    if (isRefreshingData || calculationInProgress.current) return;
+    if (!groupsLoaded || !coachesLoaded) {
+      setError('Groups and coaches must finish loading before salary can be calculated.');
+      return;
+    }
 
-    const refreshTimer = setTimeout(() => {
-      calculateSalary();
-    }, 300);
+    const now = Date.now();
+    const needsStudentRefresh =
+      !studentsLoaded
+      || Boolean(studentsError)
+      || !Number.isFinite(Number(studentsLastLoadedAt))
+      || now - Number(studentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS;
+    const needsPaymentRefresh =
+      !paymentsLoaded
+      || Boolean(paymentsError)
+      || !Number.isFinite(Number(paymentsLastLoadedAt))
+      || now - Number(paymentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS;
+    const needsDataRecovery = needsStudentRefresh || needsPaymentRefresh;
 
-    return () => clearTimeout(refreshTimer);
-  }, [
-    calculateSalary,
-    coaches.length,
-    groups.length,
-    isAdmin,
-    isCoach,
-    loadedSummaryKey,
-    payments,
-    salarySummaryStorageKey,
-    selectedMonth,
-    students.length,
-    summary,
-  ]);
+    // A first calculation may reuse source collections already loaded elsewhere
+    // in this session, but only while they remain inside the freshness window.
+    // Refreshing an existing summary always verifies both collections again.
+    if (!summary && !needsDataRecovery) {
+      await calculateSalary();
+      return;
+    }
+
+    setIsRefreshingData(true);
+    setError('');
+    try {
+      const [freshStudents, freshPayments] = await Promise.all([
+        summary || needsStudentRefresh ? refreshStudents() : Promise.resolve(students),
+        summary || needsPaymentRefresh ? refreshPayments() : Promise.resolve(payments),
+      ]);
+      await calculateSalary({
+        refreshClasses: Boolean(summary),
+        studentsOverride: freshStudents,
+        paymentsOverride: freshPayments,
+      });
+    } catch (err) {
+      console.error('Failed to refresh salary data:', err);
+      setError('Failed to refresh students or payments. The previous summary is unchanged.');
+    } finally {
+      setIsRefreshingData(false);
+    }
+  };
 
   if (!isAdmin && !isCoach) {
     return (
@@ -359,16 +477,57 @@ function SalaryPage() {
           type="month"
           value={selectedMonth}
           onChange={(event) => setSelectedMonth(event.target.value)}
+          disabled={isRefreshingData || isCalculating}
         />
         <button
           className="salary-calculate-button"
-          onClick={() => calculateSalary({ refreshClasses: true })}
-          disabled={isCalculating}
+          onClick={handleSalaryAction}
+          disabled={
+            isRefreshingData ||
+            isCalculating ||
+            studentsLoading ||
+            paymentsLoading ||
+            !groupsLoaded ||
+            !coachesLoaded
+          }
         >
-          {isCalculating ? 'Refreshing...' : summary ? 'Refresh' : 'Calculate'}
+          {isRefreshingData
+            ? 'Refreshing data...'
+            : isCalculating
+            ? 'Refreshing...'
+            : studentsLoading || paymentsLoading || !groupsLoaded || !coachesLoaded
+              ? 'Loading data...'
+              : studentsError || paymentsError
+                ? 'Retry data'
+              : !studentsLoaded || !paymentsLoaded
+                || !Number.isFinite(Number(studentsLastLoadedAt))
+                || !Number.isFinite(Number(paymentsLastLoadedAt))
+                || Date.now() - Number(studentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
+                || Date.now() - Number(paymentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
+                ? 'Load data'
+              : summary
+                ? 'Refresh'
+                : 'Calculate'}
         </button>
       </div>
 
+      {(groupsError || coachesError || studentsError || paymentsError) && (
+        <p className="salary-error">
+          {groupsError && `Groups: ${groupsError} `}
+          {coachesError && `Coaches: ${coachesError} `}
+          {studentsError && `Students: ${studentsError}`}
+          {studentsError && paymentsError && ' '}
+          {paymentsError && `Payments: ${paymentsError}`}
+        </p>
+      )}
+      {summaryIsStale && summary && !isCalculating && (
+        <p className="salary-error">Cached salary is older than the refresh window and is awaiting recalculation.</p>
+      )}
+      {summary?.generatedAt && (
+        <p role="status">
+          Salary generated {new Date(summary.generatedAt).toLocaleString()}
+        </p>
+      )}
       {error && <p className="salary-error">{error}</p>}
 
       {summary && (

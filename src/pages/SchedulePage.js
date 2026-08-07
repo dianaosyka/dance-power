@@ -1,10 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  collection,
+  documentId,
+  getDocsFromServer,
+  query,
+  where,
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
+import { getReadCacheEpoch } from '../utils/readCacheEpoch';
 import './SchedulePage.css';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Associate in-flight reads with the shared cache instance so remounting the
+// route reuses them. A new cache Map for a new user gets a fresh registry.
+const scheduleRequestsByCache = new WeakMap();
+
+function getScheduleRequests(cache) {
+  let requests = scheduleRequestsByCache.get(cache);
+  if (!requests) {
+    requests = new Map();
+    scheduleRequestsByCache.set(cache, requests);
+  }
+  return requests;
+}
 
 function startOfWeek(date) {
   const result = new Date(date);
@@ -44,6 +65,14 @@ function coachIds(classItem, group) {
   return group?.coach ? [group.coach] : [];
 }
 
+function formatLoadedTime(timestamp) {
+  if (!timestamp) return 'Not loaded yet';
+  return `Last loaded ${new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
 function SchedulePage() {
   const navigate = useNavigate();
   const { db, groups, coaches, scheduleCache, replacementCache } = useData();
@@ -52,6 +81,15 @@ function SchedulePage() {
   const [pastClasses, setPastClasses] = useState([]);
   const [replacements, setReplacements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [lastLoadedAt, setLastLoadedAt] = useState(null);
+  const [loadedRangeKey, setLoadedRangeKey] = useState('');
+  const loadGeneration = useRef(0);
+
+  const visibleGroups = useMemo(
+    () => groups.filter(group => group.hidden !== true),
+    [groups]
+  );
 
   const visibleDates = useMemo(() => {
     if (view === 'week') {
@@ -65,70 +103,150 @@ function SchedulePage() {
   }, [anchor, view]);
 
   const visibleDateKeys = useMemo(() => visibleDates.map(dateKey), [visibleDates]);
+  const rangeKey = useMemo(() => visibleDateKeys.join('|'), [visibleDateKeys]);
+  const visibleGroupKey = useMemo(
+    () => visibleGroups.map(group => group.id).sort().join('|'),
+    [visibleGroups]
+  );
+  const displayedDataKey = `${rangeKey}::${visibleGroupKey}`;
+  const rangeIsLoaded = loadedRangeKey === displayedDataKey;
 
-  useEffect(() => {
-    let active = true;
-    async function loadClasses() {
-      setLoading(true);
-      try {
-        const rangeKey = visibleDateKeys.join('|');
-        const results = await Promise.all(groups.map(async group => {
-          const cacheKey = `${group.id}:${rangeKey}`;
-          if (scheduleCache.has(cacheKey)) return scheduleCache.get(cacheKey);
+  const loadClasses = useCallback(async ({ force = false } = {}) => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    setLoading(true);
+    setError('');
 
-          // Firestore permits up to 30 values in an `in` query. This fetches
-          // only documents for visible dates, rather than the group's history.
-          const chunks = [];
-          for (let index = 0; index < visibleDateKeys.length; index += 30) {
-            chunks.push(visibleDateKeys.slice(index, index + 30));
-          }
-          const [classSnapshots, replacementSnapshots] = await Promise.all([
-            Promise.all(chunks.map(keys => getDocs(query(
-              collection(db, `groups/${group.id}/pastClasses`),
-              where(documentId(), 'in', keys)
-            )))),
-            Promise.all(chunks.map(keys => getDocs(query(
-              collection(db, `groups/${group.id}/replacementSuggestions`),
-              where(documentId(), 'in', keys)
-            )))),
-          ]);
-          const classes = classSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
+    try {
+      const scheduleRequests = getScheduleRequests(scheduleCache);
+      const results = await Promise.all(visibleGroups.map(async group => {
+        const cacheKey = `${group.id}:${rangeKey}`;
+        const cached = scheduleCache.get(cacheKey);
+        if (
+          !force &&
+          cached &&
+          Array.isArray(cached.classes) &&
+          Array.isArray(cached.replacements) &&
+          cached.scheduleEpoch === getReadCacheEpoch(scheduleCache) &&
+          cached.replacementEpoch === getReadCacheEpoch(replacementCache) &&
+          Date.now() - cached.fetchedAt < SCHEDULE_CACHE_TTL_MS
+        ) {
+          return {
+            classes: cached.classes.map(item => ({ ...item, group })),
+            replacements: cached.replacements.map(item => ({ ...item, group })),
+            fetchedAt: cached.fetchedAt,
+            scheduleEpoch: cached.scheduleEpoch,
+            replacementEpoch: cached.replacementEpoch,
+          };
+        }
+
+        let request = scheduleRequests.get(cacheKey);
+        if (!request) {
+          const readCurrentGroupRange = async () => {
+            const scheduleEpoch = getReadCacheEpoch(scheduleCache);
+            const replacementEpoch = getReadCacheEpoch(replacementCache);
+            // Firestore permits up to 30 values in an `in` query. This fetches
+            // only documents for visible dates, rather than the group's history.
+            const chunks = [];
+            for (let index = 0; index < visibleDateKeys.length; index += 30) {
+              chunks.push(visibleDateKeys.slice(index, index + 30));
+            }
+            const [classSnapshots, replacementSnapshots] = await Promise.all([
+              Promise.all(chunks.map(keys => getDocsFromServer(query(
+                collection(db, `groups/${group.id}/pastClasses`),
+                where(documentId(), 'in', keys)
+              )))),
+              Promise.all(chunks.map(keys => getDocsFromServer(query(
+                collection(db, `groups/${group.id}/replacementSuggestions`),
+                where(documentId(), 'in', keys)
+              )))),
+            ]);
+            const classes = classSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
               id: item.id,
               ...item.data(),
               date: item.data().date || item.id,
-              group,
             })));
-          const groupReplacements = replacementSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
-            id: item.id,
-            ...item.data(),
-            date: item.id,
-            group,
-          })));
-          visibleDateKeys.forEach(key => replacementCache.set(`${group.id}:${key}`, null));
-          groupReplacements.forEach(item => {
-            replacementCache.set(`${group.id}:${item.id}`, item);
-          });
-          const result = { classes, replacements: groupReplacements };
-          scheduleCache.set(cacheKey, result);
-          return result;
-        }));
-        if (active) {
-          setPastClasses(results.flatMap(result => result.classes));
-          setReplacements(results.flatMap(result => result.replacements));
+            const groupReplacements = replacementSnapshots.flatMap(snapshot => snapshot.docs.map(item => ({
+              id: item.id,
+              ...item.data(),
+              date: item.id,
+            })));
+
+            if (
+              getReadCacheEpoch(scheduleCache) !== scheduleEpoch ||
+              getReadCacheEpoch(replacementCache) !== replacementEpoch
+            ) {
+              // A local mutation invalidated one of these caches while the read
+              // was in flight. Re-read instead of allowing the stale response to
+              // restore entries that the mutation deliberately removed.
+              return readCurrentGroupRange();
+            }
+
+            visibleDateKeys.forEach(key => replacementCache.set(`${group.id}:${key}`, null));
+            groupReplacements.forEach(item => {
+              replacementCache.set(`${group.id}:${item.id}`, { ...item, group });
+            });
+            const result = {
+              classes,
+              replacements: groupReplacements,
+              fetchedAt: Date.now(),
+              scheduleEpoch,
+              replacementEpoch,
+            };
+            scheduleCache.set(cacheKey, result);
+            return result;
+          };
+          request = readCurrentGroupRange();
+          scheduleRequests.set(cacheKey, request);
         }
-      } catch (error) {
-        console.error('Failed to load schedule:', error);
-        if (active) {
-          setPastClasses([]);
-          setReplacements([]);
+
+        try {
+          const result = await request;
+          return {
+            classes: result.classes.map(item => ({ ...item, group })),
+            replacements: result.replacements.map(item => ({ ...item, group })),
+            fetchedAt: result.fetchedAt,
+            scheduleEpoch: result.scheduleEpoch ?? getReadCacheEpoch(scheduleCache),
+            replacementEpoch: result.replacementEpoch ?? getReadCacheEpoch(replacementCache),
+          };
+        } finally {
+          if (scheduleRequests.get(cacheKey) === request) {
+            scheduleRequests.delete(cacheKey);
+          }
         }
-      } finally {
-        if (active) setLoading(false);
+      }));
+
+      if (loadGeneration.current !== generation) return;
+      if (results.some(result => (
+        result.scheduleEpoch !== getReadCacheEpoch(scheduleCache) ||
+        result.replacementEpoch !== getReadCacheEpoch(replacementCache)
+      ))) {
+        // One group may have completed before another group was invalidated.
+        // Start a new generation so mixed pre/post-mutation results are never
+        // committed to the visible schedule.
+        return loadClasses();
       }
+      setPastClasses(results.flatMap(result => result.classes));
+      setReplacements(results.flatMap(result => result.replacements));
+      setLoadedRangeKey(displayedDataKey);
+      setLastLoadedAt(results.length
+        ? Math.min(...results.map(result => result.fetchedAt))
+        : Date.now());
+    } catch (loadError) {
+      console.error('Failed to load schedule:', loadError);
+      if (loadGeneration.current !== generation) return;
+      setError('Schedule could not be loaded. Please try again.');
+    } finally {
+      if (loadGeneration.current === generation) setLoading(false);
     }
+  }, [db, displayedDataKey, rangeKey, replacementCache, scheduleCache, visibleDateKeys, visibleGroups]);
+
+  useEffect(() => {
     loadClasses();
-    return () => { active = false; };
-  }, [db, groups, visibleDateKeys, scheduleCache, replacementCache]);
+    return () => {
+      loadGeneration.current += 1;
+    };
+  }, [loadClasses]);
 
   const coachNames = useMemo(
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
@@ -138,19 +256,21 @@ function SchedulePage() {
   const cells = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const visiblePastClasses = rangeIsLoaded ? pastClasses : [];
+    const visibleReplacements = rangeIsLoaded ? replacements : [];
     const existingByDateAndGroup = new Map(
-      pastClasses.map(item => [`${item.date}-${item.group.id}`, item])
+      visiblePastClasses.map(item => [`${item.date}-${item.group.id}`, item])
     );
     const replacementByDateAndGroup = new Map(
-      replacements.map(item => [`${item.date}-${item.group.id}`, item])
+      visibleReplacements.map(item => [`${item.date}-${item.group.id}`, item])
     );
 
     const dateCells = visibleDates.map(date => {
       const key = dateKey(date);
-      const recorded = pastClasses.filter(item => item.date === key);
+      const recorded = visiblePastClasses.filter(item => item.date === key);
       const recurring = date >= today
-        ? groups
-          .filter(group => group.hidden !== true && (group.dayOfWeek ?? 5) === date.getDay())
+        ? visibleGroups
+          .filter(group => (group.dayOfWeek ?? 5) === date.getDay())
           .filter(group => !existingByDateAndGroup.has(`${key}-${group.id}`))
           .map(group => ({ date: key, group, isFuture: true }))
         : [];
@@ -172,7 +292,7 @@ function SchedulePage() {
     const firstOffset = (visibleDates[0].getDay() + 6) % 7;
     const trailing = (7 - ((firstOffset + dateCells.length) % 7)) % 7;
     return [...Array(firstOffset).fill(null), ...dateCells, ...Array(trailing).fill(null)];
-  }, [groups, pastClasses, replacements, view, visibleDates]);
+  }, [pastClasses, rangeIsLoaded, replacements, view, visibleDates, visibleGroups]);
 
   const changePeriod = amount => {
     setAnchor(current => view === 'week'
@@ -208,13 +328,31 @@ function SchedulePage() {
           <button type="button" onClick={() => changePeriod(1)} aria-label={`Next ${view}`}>›</button>
         </div>
 
+        <p className="schedule-read-note" aria-live="polite">
+          <span title={lastLoadedAt ? new Date(lastLoadedAt).toLocaleString() : undefined}>
+            {loading && !rangeIsLoaded
+              ? 'Loading schedule…'
+              : error
+                ? `${error}${rangeIsLoaded ? ` ${formatLoadedTime(lastLoadedAt)}.` : ''}`
+                : rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Not loaded yet'}
+          </span>
+          {' · '}
+          <button type="button" disabled={loading} onClick={() => loadClasses({ force: true })}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </p>
+
         {view === 'month' && (
           <div className="schedule-weekdays">
             {DAY_NAMES.map(day => <span key={day}>{day}</span>)}
           </div>
         )}
 
-        {loading ? <p className="schedule-status">Loading schedule…</p> : (
+        {!rangeIsLoaded ? (
+          <p className="schedule-status">
+            {error || 'Loading schedule…'}
+          </p>
+        ) : (
           <div className={`schedule-grid schedule-grid--${view}`}>
             {cells.map((cell, index) => (
               <div key={cell?.key || `empty-${index}`} className={`schedule-day ${cell?.key === todayKey ? 'is-today' : ''} ${!cell ? 'is-empty' : ''}`}>

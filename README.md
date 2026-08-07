@@ -39,6 +39,26 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
+## Firebase read cache
+
+For staff accounts, the large `students` and `payments` collections are loaded
+only on routes that need them and reused across navigation. The default stale
+time is 15 minutes. A single-student page instead uses one student document and
+a server-filtered payment query unless a fresh full cache already exists. Past
+class histories use the same expiration policy. It can be changed at build time
+(milliseconds), for example:
+
+```bash
+REACT_APP_FIREBASE_READ_CACHE_TTL_MS=1800000 npm run build
+```
+
+A value of `0` makes every relevant route entry or window focus stale. Manual
+refresh buttons request current server data and also reconcile deletions. The
+schedule and coach-task views keep separate five-minute in-memory caches. Salary
+summaries are stored locally per account/month, marked stale after the configured
+window, and refreshed only when requested so opening the page does not repeatedly
+download large collections.
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).

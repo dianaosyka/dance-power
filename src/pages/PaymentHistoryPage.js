@@ -3,14 +3,38 @@ import { useData } from '../context/firebase';
 import './PaymentHistoryPage.css';
 
 function PaymentHistoryPage() {
-  const { payments, students, groups } = useData();
+  const {
+    payments,
+    students,
+    groups,
+    studentsLoaded,
+    paymentsLoaded,
+    studentsLoading,
+    paymentsLoading,
+    studentsError,
+    paymentsError,
+    studentsLastLoadedAt,
+    paymentsLastLoadedAt,
+    refreshStudents,
+    refreshPayments,
+  } = useData();
   const [sortBy, setSortBy] = useState('timestamp');
 
-  const getStudentName = (id) =>
-    students.find(s => s.id === id)?.name?.toUpperCase() || 'UNKNOWN';
+  const studentNamesById = useMemo(
+    () => new Map(students.map(student => [
+      student.id,
+      student.name?.toUpperCase() || 'UNKNOWN',
+    ])),
+    [students]
+  );
+  const groupNamesById = useMemo(
+    () => new Map(groups.map(group => [group.id, group.name || group.id])),
+    [groups]
+  );
 
+  const getStudentName = (id) => studentNamesById.get(id) || 'UNKNOWN';
   const getGroupNames = (ids) =>
-    ids.map(id => groups.find(g => g.id === id)?.name || id).join(', ');
+    (ids || []).map(id => groupNamesById.get(id) || id).join(', ');
 
   const getTimestampValue = (payment) => {
     if (typeof payment.timestamp?.toMillis === 'function') {
@@ -49,9 +73,47 @@ function PaymentHistoryPage() {
     return date.toLocaleString();
   };
 
+  const studentsLastLoadedText = studentsLastLoadedAt
+    ? new Date(studentsLastLoadedAt).toLocaleString()
+    : 'not loaded';
+  const paymentsLastLoadedText = paymentsLastLoadedAt
+    ? new Date(paymentsLastLoadedAt).toLocaleString()
+    : 'not loaded';
+  const dataLoaded = studentsLoaded && paymentsLoaded;
+  const dataLoading = studentsLoading || paymentsLoading;
+
+  const handleRefreshData = async () => {
+    try {
+      await Promise.all([refreshStudents(), refreshPayments()]);
+    } catch (err) {
+      // The shared data context exposes the error in the status message below.
+      console.error('Failed to refresh payment history data:', err);
+    }
+  };
+
   return (
     <div className="payment-history-page">
       <h2 className="history-title">💳 PAYMENT HISTORY</h2>
+      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+        <button
+          type="button"
+          className="history-sort-tab"
+          onClick={handleRefreshData}
+          disabled={dataLoading}
+        >
+          {dataLoading ? 'Refreshing...' : 'Refresh data'}
+        </button>
+        <div role="status" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+          {studentsError || paymentsError
+            ? [
+                studentsError ? `students: ${studentsError}` : '',
+                paymentsError ? `payments: ${paymentsError}` : '',
+              ].filter(Boolean).join(' | ')
+            : dataLoaded
+              ? `Last refreshed — students: ${studentsLastLoadedText}; payments: ${paymentsLastLoadedText}`
+              : 'Payment history data has not been loaded.'}
+        </div>
+      </div>
       <div className="history-sort">
         <span className="history-sort-label">Sort by</span>
         <div className="history-sort-tabs" role="tablist" aria-label="Sort payments by">
@@ -74,8 +136,14 @@ function PaymentHistoryPage() {
         </div>
       </div>
       <ul className="transaction-list">
-        {sortedPayments.map((p, i) => (
-          <li key={i} className="transaction-card">
+        {!dataLoaded && dataLoading && (
+          <li className="transaction-card">Loading payment history...</li>
+        )}
+        {dataLoaded && sortedPayments.length === 0 && (
+          <li className="transaction-card">No payments found.</li>
+        )}
+        {dataLoaded && sortedPayments.map((p) => (
+          <li key={p.id} className="transaction-card">
             <div className="top-line">
               <span className="amountSum">+{p.amount}€</span>
               <span className="date">{p.createdAt}</span>

@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
-import { getDoc, doc, collection, getDocs, query, where, limit } from 'firebase/firestore';
+import {
+  getDocFromServer,
+  doc,
+  collection,
+  getDocsFromServer,
+  query,
+  where,
+  limit,
+} from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import './LoginPage.css';
 
@@ -23,18 +31,23 @@ function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [studentId, setStudentId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionInProgress = useRef(false);
 
   const handleLogin = async () => {
+    if (submissionInProgress.current) return;
     if (!email || !password) {
       alert('Please enter email and password');
       return;
     }
 
+    submissionInProgress.current = true;
+    setIsSubmitting(true);
     try {
       const hashed = await hashPassword(password);
       const usersRef = collection(db, 'users');
       const usersQuery = query(usersRef, where('email', '==', email), limit(1));
-      const snapshot = await getDocs(usersQuery);
+      const snapshot = await getDocsFromServer(usersQuery);
       const match = snapshot.docs.find(doc => doc.data().password === hashed);
 
       if (!match) {
@@ -54,18 +67,24 @@ function LoginPage() {
     } catch (err) {
       console.error(err);
       alert('❌ Error logging in');
+    } finally {
+      submissionInProgress.current = false;
+      setIsSubmitting(false);
     }
   };
 
   const handleStudentLogin = async () => {
+    if (submissionInProgress.current) return;
     if (!studentId) {
       alert('Please enter your student ID');
       return;
     }
 
+    submissionInProgress.current = true;
+    setIsSubmitting(true);
     try {
       const studentRef = doc(db, 'students', studentId);
-      const snap = await getDoc(studentRef);
+      const snap = await getDocFromServer(studentRef);
 
       if (!snap.exists()) {
         alert('❌ Invalid student ID');
@@ -77,6 +96,9 @@ function LoginPage() {
     } catch (err) {
       console.error(err);
       alert('❌ Error verifying student ID');
+    } finally {
+      submissionInProgress.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -110,8 +132,8 @@ function LoginPage() {
             />
           </div>
 
-          <button className="confirm-button" onClick={handleLogin}>
-            Login
+          <button className="confirm-button" onClick={handleLogin} disabled={isSubmitting}>
+            {isSubmitting ? 'Logging in…' : 'Login'}
           </button>
 
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
@@ -131,7 +153,9 @@ function LoginPage() {
             />
           </div>
 
-          <button onClick={handleStudentLogin}>🔍 Search</button>
+          <button onClick={handleStudentLogin} disabled={isSubmitting}>
+            {isSubmitting ? 'Searching…' : '🔍 Search'}
+          </button>
 
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
             <button onClick={() => setMode(null)}>⬅ Back</button>
