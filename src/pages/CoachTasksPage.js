@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getReadCacheEpoch } from '../utils/readCacheEpoch';
+import RefreshStatus from '../components/RefreshStatus';
 
 const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
 const DATES_TO_CHECK = 4;
@@ -71,11 +72,8 @@ function isClassCoach(classItem, user) {
 }
 
 function formatCheckedTime(timestamp) {
-  if (!timestamp) return 'Not checked yet';
-  return `Last checked ${new Date(timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
+  if (!timestamp) return 'Not updated yet';
+  return `Last updated: ${new Date(timestamp).toLocaleString()}`;
 }
 
 function CoachTasksPage() {
@@ -378,52 +376,40 @@ function CoachTasksPage() {
     displayedWarningKey !== warningScopeKey && !displayedError
   );
 
+  if (!scopeLoading && !displayedError && displayedWarnings.length === 0) {
+    return null;
+  }
+
   return (
     <section className="main-warnings" aria-label="Coach warnings">
-      {displayedError && (
-        <div className="warnings-error">
-          <span>{displayedError} · {formatCheckedTime(displayedLastCheckedAt)}</span>
-          <button type="button" disabled={scopeLoading} onClick={() => loadWarnings({ force: true })}>
-            {scopeLoading ? 'Trying…' : 'Try again'}
-          </button>
-        </div>
-      )}
+      <RefreshStatus
+        message={formatCheckedTime(displayedLastCheckedAt)}
+        error={displayedError
+          ? `${displayedError} · ${formatCheckedTime(displayedLastCheckedAt)}`
+          : ''}
+        loading={scopeLoading}
+        onRefresh={() => loadWarnings({ force: true })}
+        refreshLabel={displayedError ? 'Try again' : 'Refresh warnings'}
+        loadingLabel={displayedError ? 'Trying…' : 'Refreshing…'}
+      />
 
-      <button
-        type="button"
-        className="warnings-summary"
-        disabled={displayedWarnings.length === 0}
-        aria-expanded={displayedWarnings.length > 0 ? expanded : false}
-        onClick={() => displayedWarnings.length > 0 && setExpanded(current => !current)}
-      >
-        <span aria-hidden="true">{scopeLoading ? '⏳' : displayedError ? '⚠️' : displayedWarnings.length > 0 ? '⚠️' : '✓'}</span>
-        <span>
-          <strong>{scopeLoading && displayedWarnings.length === 0
-            ? 'Checking coach tasks…'
-            : displayedWarnings.length > 0
-              ? `${displayedWarnings.length} ${displayedWarnings.length === 1 ? 'warning needs' : 'warnings need'} attention`
-              : displayedError
-                ? 'Coach warnings unavailable'
-                : 'No coach warnings'}</strong>
-          <small>{scopeLoading
-            ? 'Refreshing…'
-            : displayedWarnings.length > 0
-              ? expanded ? 'Hide warnings' : 'Resolve them'
-              : displayedError
-                ? 'Use Try again to reload'
-                : 'Everything is up to date'}</small>
-        </span>
-        <span aria-hidden="true">{displayedWarnings.length > 0 ? expanded ? '▲' : '▼' : ''}</span>
-      </button>
-
-      <div className="warnings-heading" aria-live="polite">
-        <span title={displayedLastCheckedAt ? new Date(displayedLastCheckedAt).toLocaleString() : undefined}>
-          {formatCheckedTime(displayedLastCheckedAt)}
-        </span>
-        <button type="button" disabled={scopeLoading} onClick={() => loadWarnings({ force: true })}>
-          {scopeLoading ? 'Refreshing…' : 'Refresh'}
+      {displayedWarnings.length > 0 && (
+        <button
+          type="button"
+          className="warnings-summary"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(current => !current)}
+        >
+          <span aria-hidden="true">⚠️</span>
+          <span>
+            <strong>
+              {displayedWarnings.length} {displayedWarnings.length === 1 ? 'warning needs' : 'warnings need'} attention
+            </strong>
+            <small>{expanded ? 'Hide warnings' : 'Resolve them'}</small>
+          </span>
+          <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
         </button>
-      </div>
+      )}
 
       {expanded && displayedWarnings.length > 0 && (
         <ul>

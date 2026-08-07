@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../context/firebase';
 import './StudentsListPage.css';
 import AddStudentModal from '../components/AddStudentModal';
+import RefreshStatus from '../components/RefreshStatus';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
@@ -31,7 +32,7 @@ function StudentsListPage() {
 
   const lastLoadedText = studentsLastLoadedAt
     ? new Date(studentsLastLoadedAt).toLocaleString()
-    : 'Not loaded yet';
+    : 'not updated yet';
 
   const handleRefreshStudents = async () => {
     try {
@@ -47,23 +48,13 @@ function StudentsListPage() {
       <div className="students-container">
         <h2 className="students-title">STUDENTS LIST</h2>
 
-        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-          <button
-            type="button"
-            className="students-button"
-            onClick={handleRefreshStudents}
-            disabled={studentsLoading}
-          >
-            {studentsLoading ? 'Refreshing...' : 'Refresh students'}
-          </button>
-          <div role="status" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
-            {studentsError
-              ? `Could not load students: ${studentsError}`
-              : studentsLoaded
-                ? `Last refreshed: ${lastLoadedText}`
-                : 'Students have not been loaded.'}
-          </div>
-        </div>
+        <RefreshStatus
+          message={studentsLoaded ? `Last updated: ${lastLoadedText}` : 'Not updated yet'}
+          error={studentsError ? `Could not load students: ${studentsError}` : ''}
+          loading={studentsLoading}
+          onRefresh={handleRefreshStudents}
+          refreshLabel="Refresh students"
+        />
 
         <select
           className="group-select"

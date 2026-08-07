@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import RefreshStatus from '../components/RefreshStatus';
 import './AddPaymentPage.css';
 
 function formatDate(dateStr) {
@@ -27,6 +28,7 @@ function AddPaymentPage() {
     studentsLoaded,
     studentsLoading,
     studentsError,
+    studentsLastLoadedAt,
     refreshStudents,
     upsertPayment,
     patchStudent,
@@ -196,22 +198,20 @@ function AddPaymentPage() {
     <div className="add-payment-page">
       <h2 className="title">ADD A PAYMENT</h2>
 
-      <div role="status" style={{ textAlign: 'center', marginBottom: '12px' }}>
-        {studentsLoading && !studentsLoaded && <p>Loading students...</p>}
-        {studentsError && <p>Could not load students: {studentsError}</p>}
-        {studentsError && (
-          <button
-            type="button"
-            onClick={handleRefreshStudents}
-            disabled={studentsLoading}
-          >
-            {studentsLoading ? 'Retrying...' : 'Retry students'}
-          </button>
-        )}
-        {studentsLoaded && students.length === 0 && !studentsError && (
-          <p>No students are available.</p>
-        )}
-      </div>
+      <RefreshStatus
+        message={studentsLoaded
+          ? students.length === 0
+            ? 'No students are available'
+            : studentsLastLoadedAt
+              ? `Last updated: ${new Date(studentsLastLoadedAt).toLocaleString()}`
+              : 'Not updated yet'
+          : 'Not updated yet'}
+        error={studentsError ? `Could not load students: ${studentsError}` : ''}
+        loading={studentsLoading}
+        onRefresh={handleRefreshStudents}
+        refreshLabel={studentsError ? 'Retry students' : 'Refresh students'}
+        loadingLabel={studentsError ? 'Retrying…' : 'Refreshing…'}
+      />
 
       <div className={`form-row ${selectedStudent ? 'required-filled' : 'required-empty'}`}>
         <label>WHO:</label>

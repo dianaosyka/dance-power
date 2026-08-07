@@ -6,6 +6,7 @@ import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 import { getPaymentClasses, isClassUpcoming } from '../utils/paymentsUtils';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import RefreshStatus from '../components/RefreshStatus';
 
 function getPaymentSortValue(payment) {
   if (typeof payment?.timestamp?.toMillis === 'function') {
@@ -460,35 +461,34 @@ function StudentDetailPage() {
     refreshingDetail || studentDataLoading || paymentDataLoading;
   const formatCheckedAt = timestamp => timestamp
     ? new Date(timestamp).toLocaleString()
-    : 'not checked yet';
+    : 'not updated yet';
   const detailDataStatus = (
-    <div role="status" style={{ textAlign: 'center', marginBottom: '12px' }}>
-      {(studentDataError || paymentDataError) && (
-        <p style={{ color: '#9c0000' }}>
-          {studentDataError && `Student: ${studentDataError}`}
-          {studentDataError && paymentDataError && ' | '}
-          {paymentDataError && `Payments: ${paymentDataError}`}
-        </p>
-      )}
-      <small>
-        Student checked: {formatCheckedAt(studentDataLoadedAt)}; payments checked:{' '}
-        {formatCheckedAt(paymentDataLoadedAt)}
-      </small>
-      <br />
-      <button type="button" onClick={handleRefreshDetail} disabled={detailDataLoading}>
-        {detailDataLoading ? 'Refreshing…' : 'Refresh student data'}
-      </button>
-    </div>
+    <RefreshStatus
+      message={`Last updated — Student: ${formatCheckedAt(studentDataLoadedAt)}; Payments: ${formatCheckedAt(paymentDataLoadedAt)}`}
+      error={(studentDataError || paymentDataError)
+        ? [
+            studentDataError ? `Student: ${studentDataError}` : '',
+            paymentDataError ? `Payments: ${paymentDataError}` : '',
+          ].filter(Boolean).join(' · ')
+        : ''}
+      loading={detailDataLoading}
+      onRefresh={handleRefreshDetail}
+      refreshLabel="Refresh student data"
+    />
   );
 
   if (!studentDataLoaded) {
     if (studentDataError) {
       return (
         <div>
-          <p>{studentDataError}</p>
-          <button type="button" onClick={handleRefreshStudents} disabled={studentDataLoading}>
-            Retry students
-          </button>
+          <RefreshStatus
+            message="Student has not been loaded yet"
+            error={studentDataError}
+            loading={studentDataLoading}
+            onRefresh={handleRefreshStudents}
+            refreshLabel="Retry student"
+            loadingLabel="Retrying…"
+          />
         </div>
       );
     }
@@ -499,9 +499,12 @@ function StudentDetailPage() {
     return (
       <div>
         <p>Student not found.</p>
-        <button type="button" onClick={handleRefreshStudents}>
-          Refresh students
-        </button>
+        <RefreshStatus
+          message="The student was not found in the latest data"
+          onRefresh={handleRefreshStudents}
+          loading={studentDataLoading}
+          refreshLabel="Refresh student"
+        />
         {isStudentAccount && (
           <button type="button" onClick={() => setUser(null)}>
             Log out
@@ -515,10 +518,14 @@ function StudentDetailPage() {
     if (paymentDataError) {
       return (
         <div>
-          <p>{paymentDataError}</p>
-          <button type="button" onClick={handleRefreshPayments} disabled={paymentDataLoading}>
-            Retry payments
-          </button>
+          <RefreshStatus
+            message="Payments have not been loaded yet"
+            error={paymentDataError}
+            loading={paymentDataLoading}
+            onRefresh={handleRefreshPayments}
+            refreshLabel="Retry payments"
+            loadingLabel="Retrying…"
+          />
         </div>
       );
     }

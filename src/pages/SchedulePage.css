@@ -101,8 +101,6 @@
 .schedule-legend .legend-pending { background: #ffc857; }
 .schedule-legend .legend-confirmed { background: #65e58c; }
 .schedule-legend .legend-denied { background: #ff7180; }
-.schedule-read-note { margin: -5px 0 16px; color: rgba(255,255,255,.45); font-size: 10px; text-align: right; }
-
 @media (max-width: 700px) {
   .schedule-page { padding: 10px; }
   .schedule-day { min-height: 83px; padding: 3px; }

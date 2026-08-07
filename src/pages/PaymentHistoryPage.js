@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useData } from '../context/firebase';
+import RefreshStatus from '../components/RefreshStatus';
 import './PaymentHistoryPage.css';
 
 function PaymentHistoryPage() {
@@ -75,10 +76,10 @@ function PaymentHistoryPage() {
 
   const studentsLastLoadedText = studentsLastLoadedAt
     ? new Date(studentsLastLoadedAt).toLocaleString()
-    : 'not loaded';
+    : 'not updated yet';
   const paymentsLastLoadedText = paymentsLastLoadedAt
     ? new Date(paymentsLastLoadedAt).toLocaleString()
-    : 'not loaded';
+    : 'not updated yet';
   const dataLoaded = studentsLoaded && paymentsLoaded;
   const dataLoading = studentsLoading || paymentsLoading;
 
@@ -94,26 +95,20 @@ function PaymentHistoryPage() {
   return (
     <div className="payment-history-page">
       <h2 className="history-title">💳 PAYMENT HISTORY</h2>
-      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-        <button
-          type="button"
-          className="history-sort-tab"
-          onClick={handleRefreshData}
-          disabled={dataLoading}
-        >
-          {dataLoading ? 'Refreshing...' : 'Refresh data'}
-        </button>
-        <div role="status" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
-          {studentsError || paymentsError
-            ? [
-                studentsError ? `students: ${studentsError}` : '',
-                paymentsError ? `payments: ${paymentsError}` : '',
-              ].filter(Boolean).join(' | ')
-            : dataLoaded
-              ? `Last refreshed — students: ${studentsLastLoadedText}; payments: ${paymentsLastLoadedText}`
-              : 'Payment history data has not been loaded.'}
-        </div>
-      </div>
+      <RefreshStatus
+        message={dataLoaded
+          ? `Last updated — Students: ${studentsLastLoadedText}; Payments: ${paymentsLastLoadedText}`
+          : 'Not updated yet'}
+        error={(studentsError || paymentsError)
+          ? [
+              studentsError ? `Students: ${studentsError}` : '',
+              paymentsError ? `Payments: ${paymentsError}` : '',
+            ].filter(Boolean).join(' · ')
+          : ''}
+        loading={dataLoading}
+        onRefresh={handleRefreshData}
+        refreshLabel="Refresh data"
+      />
       <div className="history-sort">
         <span className="history-sort-label">Sort by</span>
         <div className="history-sort-tabs" role="tablist" aria-label="Sort payments by">

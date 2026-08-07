@@ -1,0 +1,76 @@
+.refresh-status {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+  margin: 8px 0 14px;
+  padding: 2px 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.refresh-status--error {
+  color: #ffb7ca;
+}
+
+.refresh-status__message {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.refresh-status__button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.refresh-status__button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.refresh-status__button:focus-visible {
+  outline: 2px solid #ff8fc7;
+  outline-offset: 2px;
+}
+
+.refresh-status__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.refresh-status__icon {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.refresh-status__icon.is-spinning {
+  animation: refresh-status-spin 0.85s linear infinite;
+}
+
+@keyframes refresh-status-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 520px) {
+  .refresh-status {
+    align-items: center;
+    flex-direction: row;
+  }
+}

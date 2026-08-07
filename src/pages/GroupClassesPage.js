@@ -15,6 +15,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import { invalidateReadCache } from '../utils/readCacheEpoch';
+import RefreshStatus from '../components/RefreshStatus';
 import './GroupClassesPage.css';
 
 function getNextFutureDates(startFrom, weekday, count) {
@@ -210,6 +211,7 @@ function GroupClassesPage() {
   const [pastClassesLoaded, setPastClassesLoaded] = useState(false);
   const [pastClassesLoading, setPastClassesLoading] = useState(false);
   const [pastClassesError, setPastClassesError] = useState('');
+  const [pastClassesCheckedAt, setPastClassesCheckedAt] = useState(null);
   const [futureDates, setFutureDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -283,6 +285,7 @@ function GroupClassesPage() {
         if (active && pastClassLoadGeneration.current === generation) {
           setPastDates(fetched);
           setPastClassesLoaded(true);
+          setPastClassesCheckedAt(Date.now());
         }
       } catch (err) {
         console.error('Failed to load classes:', err);
@@ -317,6 +320,7 @@ function GroupClassesPage() {
       if (pastClassLoadGeneration.current !== generation) return;
       setPastDates(mapPastClassDocs(docs));
       setPastClassesLoaded(true);
+      setPastClassesCheckedAt(Date.now());
     } catch (err) {
       console.error('Failed to refresh classes:', err);
       if (pastClassLoadGeneration.current !== generation) return;
@@ -543,15 +547,15 @@ function GroupClassesPage() {
       <button className="add-cancel-button" onClick={toggleFutureDates}>
         {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
       </button>
-      <button
-        type="button"
-        className="add-cancel-button"
-        onClick={handleRefreshPastClasses}
-        disabled={pastClassesLoading}
-      >
-        {pastClassesLoading ? 'Refreshing classes...' : 'Refresh classes'}
-      </button>
-      {pastClassesError && <p role="alert">{pastClassesError}</p>}
+      <RefreshStatus
+        message={pastClassesCheckedAt
+          ? `Last updated: ${new Date(pastClassesCheckedAt).toLocaleString()}`
+          : 'Not updated yet'}
+        error={pastClassesError}
+        loading={pastClassesLoading}
+        onRefresh={handleRefreshPastClasses}
+        refreshLabel="Refresh classes"
+      />
 
       {warnings.length > 0 && (user?.role === 'admin' || user?.role === 'coach') && (
         <section className="class-warnings" aria-label="Class warnings">

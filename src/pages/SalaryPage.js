@@ -4,6 +4,7 @@ import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import { getCoachPayForClass, getCoachRatePerPerson } from '../utils/coachSalaryUtils';
+import RefreshStatus from '../components/RefreshStatus';
 import './SalaryPage.css';
 
 function getCurrentMonthValue() {
@@ -448,6 +449,31 @@ function SalaryPage() {
     }
   };
 
+  const salaryActionLoading =
+    isRefreshingData || isCalculating || studentsLoading || paymentsLoading;
+  const salaryActionLabel = studentsError || paymentsError
+    ? 'Retry data'
+    : !studentsLoaded || !paymentsLoaded
+      || !Number.isFinite(Number(studentsLastLoadedAt))
+      || !Number.isFinite(Number(paymentsLastLoadedAt))
+      || Date.now() - Number(studentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
+      || Date.now() - Number(paymentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
+      ? 'Load data'
+      : summary
+        ? 'Refresh salary'
+        : 'Calculate salary';
+  const salarySourceError = [
+    groupsError ? `Groups: ${groupsError}` : '',
+    coachesError ? `Coaches: ${coachesError}` : '',
+    studentsError ? `Students: ${studentsError}` : '',
+    paymentsError ? `Payments: ${paymentsError}` : '',
+  ].filter(Boolean).join(' · ');
+  const salaryStatusError = salarySourceError
+    || error
+    || (summaryIsStale && summary && !isCalculating
+      ? 'Cached salary is older than the refresh window and is awaiting recalculation.'
+      : '');
+
   if (!isAdmin && !isCoach) {
     return (
       <div className="salary-page">
@@ -479,56 +505,19 @@ function SalaryPage() {
           onChange={(event) => setSelectedMonth(event.target.value)}
           disabled={isRefreshingData || isCalculating}
         />
-        <button
-          className="salary-calculate-button"
-          onClick={handleSalaryAction}
-          disabled={
-            isRefreshingData ||
-            isCalculating ||
-            studentsLoading ||
-            paymentsLoading ||
-            !groupsLoaded ||
-            !coachesLoaded
-          }
-        >
-          {isRefreshingData
-            ? 'Refreshing data...'
-            : isCalculating
-            ? 'Refreshing...'
-            : studentsLoading || paymentsLoading || !groupsLoaded || !coachesLoaded
-              ? 'Loading data...'
-              : studentsError || paymentsError
-                ? 'Retry data'
-              : !studentsLoaded || !paymentsLoaded
-                || !Number.isFinite(Number(studentsLastLoadedAt))
-                || !Number.isFinite(Number(paymentsLastLoadedAt))
-                || Date.now() - Number(studentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
-                || Date.now() - Number(paymentsLastLoadedAt) >= STAFF_DATA_CACHE_TTL_MS
-                ? 'Load data'
-              : summary
-                ? 'Refresh'
-                : 'Calculate'}
-        </button>
+        <RefreshStatus
+          message={summary?.generatedAt
+            ? `Last updated: ${new Date(summary.generatedAt).toLocaleString()}`
+            : 'Not updated yet'}
+          error={salaryStatusError}
+          loading={salaryActionLoading || !groupsLoaded || !coachesLoaded}
+          onRefresh={handleSalaryAction}
+          disabled={!groupsLoaded || !coachesLoaded}
+          refreshLabel={salaryActionLabel}
+          loadingLabel={!groupsLoaded || !coachesLoaded ? 'Loading data…' : 'Refreshing…'}
+          className="salary-refresh-status"
+        />
       </div>
-
-      {(groupsError || coachesError || studentsError || paymentsError) && (
-        <p className="salary-error">
-          {groupsError && `Groups: ${groupsError} `}
-          {coachesError && `Coaches: ${coachesError} `}
-          {studentsError && `Students: ${studentsError}`}
-          {studentsError && paymentsError && ' '}
-          {paymentsError && `Payments: ${paymentsError}`}
-        </p>
-      )}
-      {summaryIsStale && summary && !isCalculating && (
-        <p className="salary-error">Cached salary is older than the refresh window and is awaiting recalculation.</p>
-      )}
-      {summary?.generatedAt && (
-        <p role="status">
-          Salary generated {new Date(summary.generatedAt).toLocaleString()}
-        </p>
-      )}
-      {error && <p className="salary-error">{error}</p>}
 
       {summary && (
         <>

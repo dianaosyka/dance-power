@@ -19,6 +19,7 @@ import {
   invalidateReadCache,
   markReadCacheChanged,
 } from '../utils/readCacheEpoch';
+import RefreshStatus from '../components/RefreshStatus';
 import './GroupClassDetailPage.css';
 
 const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
@@ -811,16 +812,14 @@ function GroupClassDetailPage() {
       <div className="class-detail-page">
         <h2>{group?.name?.toUpperCase()}</h2>
         <p>{date}</p>
-        {classStatusError ? (
-          <>
-            <p role="alert" style={{ color: '#9c0000' }}>{classStatusError}</p>
-            <button type="button" onClick={handleRefreshData} disabled={refreshingData}>
-              {refreshingData ? 'Retrying…' : 'Retry class data'}
-            </button>
-          </>
-        ) : (
-          <p role="status">Loading class details...</p>
-        )}
+        <RefreshStatus
+          message="Class details have not been loaded yet"
+          error={classStatusError}
+          loading={refreshingData || classStatusLoading}
+          onRefresh={handleRefreshData}
+          refreshLabel={classStatusError ? 'Retry class data' : 'Refresh data'}
+          loadingLabel={classStatusError ? 'Retrying…' : 'Refreshing…'}
+        />
       </div>
     );
   }
@@ -829,20 +828,13 @@ function GroupClassDetailPage() {
     <div className="class-detail-page">
       <h2>{group?.name?.toUpperCase()}</h2>
       <p>{date}</p>
-      <button
-        type="button"
-        onClick={handleRefreshData}
-        disabled={refreshingData || studentsLoading || paymentsLoading}
-        style={{ marginBottom: '10px' }}
-      >
-        {refreshingData || studentsLoading || paymentsLoading ? 'Refreshing data...' : 'Refresh data'}
-      </button>
-      {(studentsError || paymentsError || classStatusError || replacementError) && (
-        <p role="alert" style={{ color: '#9c0000' }}>
-          {studentsError || paymentsError || classStatusError || replacementError}
-        </p>
-      )}
-      {classStatusLoading && <p role="status">Refreshing class details...</p>}
+      <RefreshStatus
+        message={classStatusLoading ? 'Checking class data…' : 'Class data is loaded'}
+        error={studentsError || paymentsError || classStatusError || replacementError}
+        loading={refreshingData || studentsLoading || paymentsLoading || classStatusLoading}
+        onRefresh={handleRefreshData}
+        refreshLabel="Refresh class data"
+      />
       {!classStatusLoading && !classStatusError && !classExists && isFutureDate(date) && canEditComment && (
         <section className="future-class-callout">
           <div>

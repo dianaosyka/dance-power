@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { getReadCacheEpoch } from '../utils/readCacheEpoch';
+import RefreshStatus from '../components/RefreshStatus';
 import './SchedulePage.css';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -66,11 +67,8 @@ function coachIds(classItem, group) {
 }
 
 function formatLoadedTime(timestamp) {
-  if (!timestamp) return 'Not loaded yet';
-  return `Last loaded ${new Date(timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
+  if (!timestamp) return 'Not updated yet';
+  return `Last updated: ${new Date(timestamp).toLocaleString()}`;
 }
 
 function SchedulePage() {
@@ -328,19 +326,15 @@ function SchedulePage() {
           <button type="button" onClick={() => changePeriod(1)} aria-label={`Next ${view}`}>›</button>
         </div>
 
-        <p className="schedule-read-note" aria-live="polite">
-          <span title={lastLoadedAt ? new Date(lastLoadedAt).toLocaleString() : undefined}>
-            {loading && !rangeIsLoaded
-              ? 'Loading schedule…'
-              : error
-                ? `${error}${rangeIsLoaded ? ` ${formatLoadedTime(lastLoadedAt)}.` : ''}`
-                : rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Not loaded yet'}
-          </span>
-          {' · '}
-          <button type="button" disabled={loading} onClick={() => loadClasses({ force: true })}>
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </p>
+        <RefreshStatus
+          message={rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Not updated yet'}
+          error={error
+            ? `${error}${rangeIsLoaded ? ` ${formatLoadedTime(lastLoadedAt)}.` : ''}`
+            : ''}
+          loading={loading}
+          onRefresh={() => loadClasses({ force: true })}
+          refreshLabel="Refresh schedule"
+        />
 
         {view === 'month' && (
           <div className="schedule-weekdays">
