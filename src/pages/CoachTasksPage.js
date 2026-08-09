@@ -3,7 +3,6 @@ import {
   collection,
   documentId,
   getDocsFromServer,
-  or,
   query,
   Timestamp,
   where,
@@ -240,11 +239,28 @@ function CoachTasksPage() {
           confirmedReplacementDatesByGroup.set(group.id, dates);
         });
 
-        // Reuse the existing per-group incomplete-attendance query for missing
-        // class checks. For groups where this coach is responsible, the same
-        // query also returns the few recent document IDs. This replaces the old
-        // separate recent-class query instead of adding a new database read.
-        const classChecks = activeGroups.map(async group => {
+        // Keep these as simple single-field/default-index queries. The previous
+        // combined OR query was rejected by the deployed Firestore setup.
+        const incompleteChecks = activeGroups.map(async group => {
+          const snapshot = await getDocsFromServer(query(
+            collection(db, `groups/${group.id}/pastClasses`),
+            where('attendanceCompleted', '==', false)
+          ));
+          return snapshot.docs.map(classDoc => {
+            const data = classDoc.data();
+            return {
+              group,
+              date: data?.date || classDoc.id,
+              classItem: {
+                id: classDoc.id,
+                ...data,
+                date: data?.date || classDoc.id,
+              },
+            };
+          });
+        });
+
+        const recentChecks = activeGroups.map(async group => {
           const expectedDates = getRecentExpectedDates(group.dayOfWeek ?? 5);
           const oldestExpectedDate = parseDate(expectedDates[expectedDates.length - 1]);
           const today = new Date();
@@ -258,44 +274,38 @@ function CoachTasksPage() {
             ...(isRegularCoach(group, user) ? expectedDates : []),
             ...confirmedDates,
           ]);
-          const filters = [where('attendanceCompleted', '==', false)];
-          if (responsibilityDates.size > 0) {
-            filters.push(where(documentId(), 'in', [...responsibilityDates]));
-          }
-          const classFilter = filters.length === 1 ? filters[0] : or(...filters);
+          if (responsibilityDates.size === 0) return [];
+
           const snapshot = await getDocsFromServer(query(
             collection(db, `groups/${group.id}/pastClasses`),
-            classFilter
+            where(documentId(), 'in', [...responsibilityDates])
           ));
-          const classRows = snapshot.docs.map(classDoc => {
+          const classesByDate = new Map(snapshot.docs.flatMap(classDoc => {
             const data = classDoc.data();
-            return {
-              group,
+            const classItem = {
+              id: classDoc.id,
+              ...data,
               date: data?.date || classDoc.id,
-              classItem: {
-                id: classDoc.id,
-                ...data,
-                date: data?.date || classDoc.id,
-              },
             };
-          });
-          const classesByDate = new Map(classRows.flatMap(row => [
-            [row.date, row.classItem],
-            [row.classItem.id, row.classItem],
-          ]));
+            return [
+              [classDoc.id, classItem],
+              [classItem.date, classItem],
+            ];
+          }));
 
-          return [
-            ...classRows,
-            ...[...responsibilityDates].map(responsibilityDate => ({
-              group,
-              date: responsibilityDate,
-              classItem: classesByDate.get(responsibilityDate) || null,
-            })),
-          ];
+          return [...responsibilityDates].map(responsibilityDate => ({
+            group,
+            date: responsibilityDate,
+            classItem: classesByDate.get(responsibilityDate) || null,
+          }));
         });
-        const classResultsByGroup = await Promise.all(classChecks);
+        const [incompleteResultsByGroup, recentResultsByGroup] = await Promise.all([
+          Promise.all(incompleteChecks),
+          Promise.all(recentChecks),
+        ]);
         const results = [
-          ...classResultsByGroup.flat(),
+          ...incompleteResultsByGroup.flat(),
+          ...recentResultsByGroup.flat(),
           ...legacyResultsByGroup.flat(),
         ];
         const warningByKey = new Map();
