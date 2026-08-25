@@ -15,6 +15,71 @@ import { getPaymentDetailPath } from '../utils/paymentNavigationUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './PaymentHistoryPage.css';
 
+const COMPACT_MONTHS = [
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+  'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+];
+
+const PAYMENT_CATEGORY_LABELS = {
+  hall_rent: 'hall rent',
+  private_lessons: 'private lesson',
+  workshops: 'workshop',
+};
+
+function formatStudentName(value) {
+  const normalizedName = String(value || 'unknown').trim().toLocaleLowerCase();
+
+  return normalizedName.replace(
+    /(^|[\s'’-])(\p{L})/gu,
+    (match, boundary, letter) => `${boundary}${letter.toLocaleUpperCase()}`
+  );
+}
+
+function formatSurnameFirst(value) {
+  const nameParts = formatStudentName(value).split(/\s+/).filter(Boolean);
+  if (nameParts.length < 2) return nameParts[0] || 'Unknown';
+
+  return `${nameParts[nameParts.length - 1]} ${nameParts.slice(0, -1).join(' ')}`;
+}
+
+function getEuropeanDateParts(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+
+  return { day, month };
+}
+
+function formatCompactPaymentDate(value) {
+  const parts = getEuropeanDateParts(value);
+  if (!parts) return String(value || '—').toLocaleLowerCase();
+  return `${parts.day}. ${COMPACT_MONTHS[parts.month - 1]}`;
+}
+
+function formatShortStartDate(value) {
+  const parts = getEuropeanDateParts(value);
+  if (!parts) return String(value || '').toLocaleLowerCase();
+  return `${parts.day}.${parts.month}.`;
+}
+
+function formatEuroAmount(value) {
+  const amount = Number(String(value ?? '').replace(',', '.'));
+  if (!Number.isFinite(amount)) return `€ ${value || '0,00'}`;
+
+  const [whole, decimals] = amount.toFixed(2).split('.');
+  const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `€ ${groupedWhole},${decimals}`;
+}
+
+function getPaymentCategoryLabel(payment) {
+  if (payment.paymentKind !== 'other') return 'payment for groups';
+  return PAYMENT_CATEGORY_LABELS[payment.reason]
+    || getOtherPaymentReasonLabel(payment.reason).toLocaleLowerCase();
+}
+
 function PaymentHistoryPage() {
   const navigate = useNavigate();
   const {
@@ -35,7 +100,9 @@ function PaymentHistoryPage() {
   } = useData();
   const { user } = useUser();
   const historyScope = user?.id || user?.role || 'signed-out';
-  const [sortBy, setSortBy] = useState('timestamp');
+  const canAddPayment = user?.role === 'admin' || user?.role === 'coach';
+  const [sortBy, setSortBy] = useState('paymentDate');
+  const [expandedPayments, setExpandedPayments] = useState(() => new Set());
   const [otherPayments, setOtherPayments] = useState(
     () => getOtherPaymentHistoryCache(historyScope).payments
   );
@@ -80,18 +147,54 @@ function PaymentHistoryPage() {
   const studentNamesById = useMemo(
     () => new Map(students.map(student => [
       student.id,
-      student.name?.toUpperCase() || 'UNKNOWN',
+      formatStudentName(student.name),
     ])),
     [students]
   );
-  const groupNamesById = useMemo(
-    () => new Map(groups.map(group => [group.id, group.name || group.id])),
+  const studentDisplayNamesById = useMemo(
+    () => new Map(students.map(student => [
+      student.id,
+      formatSurnameFirst(student.name),
+    ])),
+    [students]
+  );
+  const groupsById = useMemo(
+    () => new Map(groups.map(group => [group.id, group])),
     [groups]
   );
 
-  const getStudentName = (id) => studentNamesById.get(id) || 'UNKNOWN';
+  const getStudentName = (id) => studentNamesById.get(id) || 'Unknown';
+  const getStudentDisplayName = (id) => studentDisplayNamesById.get(id) || 'Unknown';
+  const getPaymentGroups = (ids) =>
+    (ids || []).map(id => groupsById.get(id) || { id, name: id });
   const getGroupNames = (ids) =>
-    (ids || []).map(id => groupNamesById.get(id) || id).join(', ');
+    getPaymentGroups(ids).map(group => group.name || group.id).join(', ');
+  const getGroupTypes = (ids) => [
+    ...new Set(getPaymentGroups(ids).map(group => group.type).filter(Boolean)),
+  ].join(', ');
+
+  const getPaymentDescription = (payment) => {
+    const studentName = getStudentName(payment.studentId);
+    const startDate = formatShortStartDate(payment.dateFrom);
+    const startDateAndTime = [startDate, payment.timeFrom].filter(Boolean).join(' ');
+
+    if (payment.paymentKind === 'other') {
+      return [
+        studentName,
+        getOtherPaymentReasonLabel(payment.reason).toLocaleLowerCase(),
+        startDateAndTime,
+      ].filter(Boolean).join(' ');
+    }
+
+    const groupDescriptions = getPaymentGroups(payment.groups).map(group => [
+      group.name || group.id,
+      group.type,
+    ].filter(Boolean).join(' ').toLocaleLowerCase());
+
+    return [studentName, groupDescriptions.join(', '), startDateAndTime]
+      .filter(Boolean)
+      .join(' ');
+  };
 
   const getTimestampValue = (payment) => {
     if (typeof payment.timestamp?.toMillis === 'function') {
@@ -130,9 +233,21 @@ function PaymentHistoryPage() {
   }, [otherPayments, payments, sortBy]);
 
   const formatTimestamp = (ts) => {
-    if (!ts || !ts.seconds) return '—';
-    const date = new Date(ts.seconds * 1000);
+    if (!ts) return '—';
+    const date = typeof ts.toDate === 'function'
+      ? ts.toDate()
+      : new Date(Number(ts.seconds || 0) * 1000);
+    if (Number.isNaN(date.getTime())) return '—';
     return date.toLocaleString();
+  };
+
+  const togglePaymentDetails = (paymentKey) => {
+    setExpandedPayments(current => {
+      const next = new Set(current);
+      if (next.has(paymentKey)) next.delete(paymentKey);
+      else next.add(paymentKey);
+      return next;
+    });
   };
 
   const studentsLastLoadedText = studentsLastLoadedAt
@@ -163,7 +278,21 @@ function PaymentHistoryPage() {
 
   return (
     <div className="payment-history-page">
-      <h2 className="history-title">💳 PAYMENT HISTORY</h2>
+      <div className="history-header">
+        <h2 className="history-title">💳 PAYMENT HISTORY</h2>
+        {canAddPayment && (
+          <button
+            type="button"
+            className="history-add-payment"
+            aria-label="Add payment"
+            title="Add payment"
+            onClick={() => navigate('/add-payment')}
+          >
+            <span className="history-add-payment-icon" aria-hidden="true">+</span>
+            <span>ADD PAYMENT</span>
+          </button>
+        )}
+      </div>
       <RefreshStatus
         message={dataLoaded
           ? `Last updated — Students: ${studentsLastLoadedText}; Group payments: ${paymentsLastLoadedText}; Other payments: ${otherPaymentsLastLoadedText}`
@@ -202,48 +331,111 @@ function PaymentHistoryPage() {
       </div>
       <ul className="transaction-list">
         {!dataLoaded && dataLoading && (
-          <li className="transaction-card">Loading payment history...</li>
+          <li className="transaction-card transaction-message">Loading payment history...</li>
         )}
         {dataLoaded && sortedPayments.length === 0 && (
-          <li className="transaction-card">No payments found.</li>
+          <li className="transaction-card transaction-message">No payments found.</li>
         )}
-        {dataLoaded && sortedPayments.map((p) => (
-          <li
-            key={`${p.paymentKind}-${p.id}`}
-            className="transaction-card transaction-card-link"
-            role="link"
-            tabIndex={0}
-            onClick={() => navigate(getPaymentDetailPath(p))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                navigate(getPaymentDetailPath(p));
-              }
-            }}
-          >
-            <div className="top-line">
-              <div className="transaction-summary">
-                <div className="info"><b>Student:</b> {getStudentName(p.studentId)}</div>
-                <span className="date">{p.createdAt}</span>
-              </div>
-              <span className="amountSum">+{p.amount}€</span>
-            </div>
-            <div className="info">
-              <div><b>Paid by:</b> {getPaymentMethodLabel(p.paymentMethod)}</div>
-              {p.paymentKind === 'other' ? (
-                <div><b>Reason:</b> {getOtherPaymentReasonLabel(p.reason)}</div>
-              ) : (
-                <>
-                  <div><b>Classes:</b> {p.type}</div>
-                  <div><b>Groups:</b> {getGroupNames(p.groups)}</div>
-                </>
+        {dataLoaded && sortedPayments.map((p, index) => {
+          const paymentKey = `${p.paymentKind}-${p.id}`;
+          const studentName = getStudentDisplayName(p.studentId);
+          const paymentDescription = getPaymentDescription(p);
+          const formattedAmount = formatEuroAmount(p.amount);
+          const detailsId = `payment-details-${index}`;
+          const isExpanded = expandedPayments.has(paymentKey);
+
+          return (
+            <li key={paymentKey} className="transaction-card">
+              <button
+                type="button"
+                className="transaction-overview"
+                onClick={() => navigate(getPaymentDetailPath(p))}
+                aria-label={`Open payment for ${studentName}, ${formatCompactPaymentDate(p.createdAt)}, ${paymentDescription}, ${formattedAmount}`}
+              >
+                <span className="transaction-icon" aria-hidden="true">
+                  <svg className="transaction-icon-glyph" viewBox="0 0 28 28" focusable="false">
+                    <path d="M16.5 4.5 6.5 14.5M6.5 8.5v6h6" />
+                    <path d="M20.5 15.5v7M17 19h7" />
+                  </svg>
+                </span>
+                <span className="transaction-summary">
+                  <span className="transaction-name">{studentName}</span>
+                  <span className="amountSum">{formattedAmount}</span>
+                  <span className="transaction-date">
+                    {formatCompactPaymentDate(p.createdAt)}
+                  </span>
+                  <span className="transaction-description">
+                    {paymentDescription}
+                  </span>
+                  <span className="transaction-category">
+                    {getPaymentCategoryLabel(p)}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="transaction-expand"
+                aria-expanded={isExpanded}
+                aria-controls={detailsId}
+                aria-label={`${isExpanded ? 'Hide' : 'Show'} all payment information for ${studentName}`}
+                onClick={() => togglePaymentDetails(paymentKey)}
+              >
+                <span className="transaction-expand-icon" aria-hidden="true" />
+              </button>
+
+              {isExpanded && (
+                <div className="transaction-details" id={detailsId}>
+                  <dl>
+                    <div>
+                      <dt>paid by</dt>
+                      <dd>{getPaymentMethodLabel(p.paymentMethod).toLocaleLowerCase()}</dd>
+                    </div>
+                    <div>
+                      <dt>payment date</dt>
+                      <dd>{p.createdAt || '—'}</dd>
+                    </div>
+                    {p.paymentKind === 'other' ? (
+                      <div>
+                        <dt>reason</dt>
+                        <dd>{getOtherPaymentReasonLabel(p.reason).toLocaleLowerCase()}</dd>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <dt>classes</dt>
+                          <dd>{p.type ?? '—'}</dd>
+                        </div>
+                        <div>
+                          <dt>groups</dt>
+                          <dd>{getGroupNames(p.groups).toLocaleLowerCase() || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt>class type</dt>
+                          <dd>{getGroupTypes(p.groups).toLocaleLowerCase() || '—'}</dd>
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <dt>date from</dt>
+                      <dd>{p.dateFrom || '—'}{p.timeFrom ? ` ${p.timeFrom}` : ''}</dd>
+                    </div>
+                    {p.paymentKind !== 'other' && (
+                      <div>
+                        <dt>discount</dt>
+                        <dd>{p.discount ?? 0}%</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>timestamp</dt>
+                      <dd>{formatTimestamp(p.timestamp)}</dd>
+                    </div>
+                  </dl>
+                </div>
               )}
-              <div><b>Date from:</b> {p.dateFrom}{p.timeFrom ? ` ${p.timeFrom}` : ''}</div>
-              {p.paymentKind !== 'other' && <div><b>Discount:</b> {p.discount}%</div>}
-              <div><b>Timestamp:</b> {formatTimestamp(p.timestamp)}</div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

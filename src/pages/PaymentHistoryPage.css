@@ -1,17 +1,74 @@
 .payment-history-page {
-  padding: 20px;
-  background: #d9006c;
-  font-family: sans-serif;
+  --payment-row-padding: clamp(14px, 4.55vw, 20px);
+  --payment-icon-size: clamp(44px, 11.82vw, 52px);
+  --payment-row-gap: clamp(11px, 3.18vw, 14px);
+  box-sizing: border-box;
+  width: 100%;
   min-height: 100vh;
-  padding: 20px;
-  max-width: 400px;
+  max-width: 520px;
   margin: auto;
+  padding: 20px;
+  overflow: hidden;
+  background: #d9006c;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.history-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .history-title {
-  font-size: 24px;
-  margin-bottom: 20px;
+  min-width: 0;
+  margin: 0;
   color: #ffe7fd;
+  font-size: clamp(20px, 5.45vw, 24px);
+}
+
+.history-add-payment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #00006b;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(38, 0, 55, 0.22);
+  transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.history-add-payment:hover {
+  background: #111184;
+  box-shadow: 0 4px 9px rgba(38, 0, 55, 0.28);
+  transform: translateY(-1px);
+}
+
+.history-add-payment:active {
+  box-shadow: 0 1px 3px rgba(38, 0, 55, 0.22);
+  transform: translateY(0);
+}
+
+.history-add-payment:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.history-add-payment-icon {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 0.8;
 }
 
 .history-sort {
@@ -60,57 +117,223 @@
 }
 
 .transaction-list {
-  list-style: none;
+  margin: 0 -20px;
   padding: 0;
+  border-top: 1px solid #dce5ec;
+  border-bottom: 1px solid #dce5ec;
+  background: #ffffff;
+  list-style: none;
 }
 
 .transaction-card {
-  background-color: #ffe7fd;
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid #dce5ec;
+  background: #ffffff;
 }
 
-.transaction-card-link {
+.transaction-card:last-child {
+  border-bottom: 0;
+}
+
+.transaction-message {
+  padding: 18px 20px;
+  color: #173d64;
+  font-size: 14px;
+}
+
+.transaction-overview {
+  display: grid;
+  grid-template-columns: var(--payment-icon-size) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--payment-row-gap);
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 16px var(--payment-row-padding) 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.transaction-card-link:hover,
-.transaction-card-link:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.9);
-  outline-offset: 2px;
+.transaction-overview:hover {
+  background: #fbfdff;
 }
 
-.top-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  font-weight: bold;
-  margin-bottom: 10px;
+.transaction-overview:focus-visible,
+.transaction-expand:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #1b67a2;
+  outline-offset: -2px;
+}
+
+.transaction-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--payment-icon-size);
+  height: var(--payment-icon-size);
+  margin-top: -1px;
+  border-radius: 50%;
+  background: #f1f8fc;
+  color: #0869a4;
+  font-weight: 700;
+}
+
+.transaction-icon-glyph {
+  width: clamp(24px, 6.36vw, 28px);
+  height: clamp(24px, 6.36vw, 28px);
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .transaction-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
   min-width: 0;
-  font-weight: normal;
 }
 
-.transaction-summary .date {
+.transaction-name,
+.transaction-date,
+.transaction-description {
   display: block;
-  font-weight: bold;
+}
+
+.transaction-name {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  color: #11346b;
+  font-size: clamp(14px, 3.64vw, 16px);
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-date {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  color: #173d72;
+  font-size: clamp(14px, 3.64vw, 16px);
+  line-height: 1.25;
+}
+
+.transaction-description {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  margin-top: 4px;
+  color: #5a7a9f;
+  font-size: clamp(13px, 3.41vw, 15px);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-category {
+  grid-column: 1 / -1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 22px;
+  margin-top: 7px;
+  padding: 1px 10px 2px;
+  overflow: hidden;
+  border: 1px solid #7185a9;
+  border-radius: 999px;
+  color: #64789e;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .amountSum {
-  color: #4caf50;
-  flex-shrink: 0;
-  margin-left: 12px;
+  grid-column: 2;
+  grid-row: 1;
+  color: #11851c;
+  font-size: clamp(14px, 3.64vw, 16px);
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
-.date {
-  color: #888;
+.transaction-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 27px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #ffffff;
+  color: #6b82a3;
+  cursor: pointer;
 }
 
-.info {
-  font-size: 14px;
-  color: #222222;
+.transaction-expand:hover {
+  background: #f5f9fc;
+}
+
+.transaction-expand-icon {
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 160ms ease, margin 160ms ease;
+}
+
+.transaction-expand[aria-expanded="true"] .transaction-expand-icon {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+
+.transaction-details {
+  padding: 12px var(--payment-row-padding) 16px
+    calc(var(--payment-row-padding) + var(--payment-icon-size) + var(--payment-row-gap));
+  border-top: 1px solid #e5edf3;
+  background: #f8fbfd;
+  color: #284765;
+}
+
+.transaction-details dl {
+  margin: 0;
+}
+
+.transaction-details dl > div {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.transaction-details dt {
+  color: #73869a;
+  font-weight: 500;
+}
+
+.transaction-details dd {
+  min-width: 0;
+  margin: 0;
+  color: #173d64;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
