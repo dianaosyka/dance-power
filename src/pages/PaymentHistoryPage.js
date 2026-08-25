@@ -1,13 +1,27 @@
-import React, { useMemo, useState } from 'react';
-import { useData } from '../context/firebase';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
+import { useUser } from '../context/UserContext';
+import {
+  getOtherPaymentReasonLabel,
+} from '../utils/otherPaymentsUtils';
+import {
+  getOtherPaymentHistoryCache,
+  hasFreshOtherPaymentHistory,
+  loadOtherPaymentHistory,
+} from '../utils/otherPaymentsCache';
+import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
+import { getPaymentDetailPath } from '../utils/paymentNavigationUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './PaymentHistoryPage.css';
 
 function PaymentHistoryPage() {
+  const navigate = useNavigate();
   const {
     payments,
     students,
     groups,
+    db,
     studentsLoaded,
     paymentsLoaded,
     studentsLoading,
@@ -19,7 +33,49 @@ function PaymentHistoryPage() {
     refreshStudents,
     refreshPayments,
   } = useData();
+  const { user } = useUser();
+  const historyScope = user?.id || user?.role || 'signed-out';
   const [sortBy, setSortBy] = useState('timestamp');
+  const [otherPayments, setOtherPayments] = useState(
+    () => getOtherPaymentHistoryCache(historyScope).payments
+  );
+  const [otherPaymentsLoaded, setOtherPaymentsLoaded] = useState(
+    () => getOtherPaymentHistoryCache(historyScope).loadedAt !== null
+  );
+  const [otherPaymentsLoading, setOtherPaymentsLoading] = useState(false);
+  const [otherPaymentsError, setOtherPaymentsError] = useState('');
+  const [otherPaymentsLastLoadedAt, setOtherPaymentsLastLoadedAt] = useState(
+    () => getOtherPaymentHistoryCache(historyScope).loadedAt
+  );
+
+  const loadOtherPayments = useCallback(async ({ force = false } = {}) => {
+    if (!force && hasFreshOtherPaymentHistory(historyScope, STAFF_DATA_CACHE_TTL_MS)) {
+      const cachedHistory = getOtherPaymentHistoryCache(historyScope);
+      setOtherPayments(cachedHistory.payments);
+      setOtherPaymentsLoaded(true);
+      setOtherPaymentsLastLoadedAt(cachedHistory.loadedAt);
+      return cachedHistory.payments;
+    }
+
+    setOtherPaymentsLoading(true);
+    setOtherPaymentsError('');
+    try {
+      const result = await loadOtherPaymentHistory(db, historyScope);
+      setOtherPayments(result.payments);
+      setOtherPaymentsLoaded(true);
+      setOtherPaymentsLastLoadedAt(result.loadedAt);
+      return result.payments;
+    } catch (error) {
+      setOtherPaymentsError(error?.message || String(error));
+      throw error;
+    } finally {
+      setOtherPaymentsLoading(false);
+    }
+  }, [db, historyScope]);
+
+  useEffect(() => {
+    loadOtherPayments().catch(() => {});
+  }, [loadOtherPayments]);
 
   const studentNamesById = useMemo(
     () => new Map(students.map(student => [
@@ -62,11 +118,16 @@ function PaymentHistoryPage() {
       return getTimestampValue(payment);
     };
 
-    return [...payments].sort((a, b) => {
+    const allPayments = [
+      ...payments.map(payment => ({ ...payment, paymentKind: 'group' })),
+      ...otherPayments.map(payment => ({ ...payment, paymentKind: 'other' })),
+    ];
+
+    return allPayments.sort((a, b) => {
       const difference = getSortValue(b) - getSortValue(a);
       return difference || getTimestampValue(b) - getTimestampValue(a);
     });
-  }, [payments, sortBy]);
+  }, [otherPayments, payments, sortBy]);
 
   const formatTimestamp = (ts) => {
     if (!ts || !ts.seconds) return '—';
@@ -80,12 +141,20 @@ function PaymentHistoryPage() {
   const paymentsLastLoadedText = paymentsLastLoadedAt
     ? new Date(paymentsLastLoadedAt).toLocaleString()
     : 'not updated yet';
-  const dataLoaded = studentsLoaded && paymentsLoaded;
-  const dataLoading = studentsLoading || paymentsLoading;
+  const otherPaymentsLastLoadedText = otherPaymentsLastLoadedAt
+    ? new Date(otherPaymentsLastLoadedAt).toLocaleString()
+    : 'not updated yet';
+  const otherPaymentsReady = otherPaymentsLoaded || Boolean(otherPaymentsError);
+  const dataLoaded = studentsLoaded && paymentsLoaded && otherPaymentsReady;
+  const dataLoading = studentsLoading || paymentsLoading || otherPaymentsLoading;
 
   const handleRefreshData = async () => {
     try {
-      await Promise.all([refreshStudents(), refreshPayments()]);
+      await Promise.all([
+        refreshStudents(),
+        refreshPayments(),
+        loadOtherPayments({ force: true }),
+      ]);
     } catch (err) {
       // The shared data context exposes the error in the status message below.
       console.error('Failed to refresh payment history data:', err);
@@ -97,12 +166,13 @@ function PaymentHistoryPage() {
       <h2 className="history-title">💳 PAYMENT HISTORY</h2>
       <RefreshStatus
         message={dataLoaded
-          ? `Last updated — Students: ${studentsLastLoadedText}; Payments: ${paymentsLastLoadedText}`
+          ? `Last updated — Students: ${studentsLastLoadedText}; Group payments: ${paymentsLastLoadedText}; Other payments: ${otherPaymentsLastLoadedText}`
           : 'Not updated yet'}
-        error={(studentsError || paymentsError)
+        error={(studentsError || paymentsError || otherPaymentsError)
           ? [
               studentsError ? `Students: ${studentsError}` : '',
-              paymentsError ? `Payments: ${paymentsError}` : '',
+              paymentsError ? `Group payments: ${paymentsError}` : '',
+              otherPaymentsError ? `Other payments: ${otherPaymentsError}` : '',
             ].filter(Boolean).join(' · ')
           : ''}
         loading={dataLoading}
@@ -138,17 +208,38 @@ function PaymentHistoryPage() {
           <li className="transaction-card">No payments found.</li>
         )}
         {dataLoaded && sortedPayments.map((p) => (
-          <li key={p.id} className="transaction-card">
+          <li
+            key={`${p.paymentKind}-${p.id}`}
+            className="transaction-card transaction-card-link"
+            role="link"
+            tabIndex={0}
+            onClick={() => navigate(getPaymentDetailPath(p))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate(getPaymentDetailPath(p));
+              }
+            }}
+          >
             <div className="top-line">
+              <div className="transaction-summary">
+                <div className="info"><b>Student:</b> {getStudentName(p.studentId)}</div>
+                <span className="date">{p.createdAt}</span>
+              </div>
               <span className="amountSum">+{p.amount}€</span>
-              <span className="date">{p.createdAt}</span>
             </div>
             <div className="info">
-              <div><b>Student:</b> {getStudentName(p.studentId)}</div>
-              <div><b>Classes:</b> {p.type}</div>
-              <div><b>Groups:</b> {getGroupNames(p.groups)}</div>
+              <div><b>Paid by:</b> {getPaymentMethodLabel(p.paymentMethod)}</div>
+              {p.paymentKind === 'other' ? (
+                <div><b>Reason:</b> {getOtherPaymentReasonLabel(p.reason)}</div>
+              ) : (
+                <>
+                  <div><b>Classes:</b> {p.type}</div>
+                  <div><b>Groups:</b> {getGroupNames(p.groups)}</div>
+                </>
+              )}
               <div><b>Date from:</b> {p.dateFrom}{p.timeFrom ? ` ${p.timeFrom}` : ''}</div>
-              <div><b>Discount:</b> {p.discount}%</div>
+              {p.paymentKind !== 'other' && <div><b>Discount:</b> {p.discount}%</div>}
               <div><b>Timestamp:</b> {formatTimestamp(p.timestamp)}</div>
             </div>
           </li>

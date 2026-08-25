@@ -40,7 +40,9 @@ function AppRoutes() {
       <Route path="/students" element={<StudentsListPage />} />
       <Route
         path="/add-payment"
-        element={user.role === 'admin' ? <AddPaymentPage /> : <Navigate to="/" replace />}
+        element={user.role === 'admin' || user.role === 'coach'
+          ? <AddPaymentPage />
+          : <Navigate to="/" replace />}
       />
       <Route path="/group/:groupId" element={<GroupClassesPage />} />
       <Route path="/student/:studentId" element={<StudentDetailPage />} />

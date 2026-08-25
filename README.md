@@ -59,6 +59,17 @@ summaries are stored locally per account/month, marked stale after the configure
 window, and refreshed only when requested so opening the page does not repeatedly
 download large collections.
 
+Other payments are stored as monthly bucket documents such as
+`otherpayments/08.2026`. Each document has a `payments` map keyed by generated
+payment IDs. Salary reads only the selected month document; payment history reads
+one document per available month and reuses it for the same cache window. Changing
+the history sort does not make another Firestore request.
+
+New group and other-payment records store `paymentMethod` as `card` or `cash`.
+Records created before this field was introduced are displayed as card payments.
+Admins can select either method; coaches can add group payments only and their
+payments are always stored as cash.
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).

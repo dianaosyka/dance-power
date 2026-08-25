@@ -16,6 +16,63 @@ body {
   margin-bottom: 16px;
 }
 
+.payment-mode-toggle {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: fit-content;
+  height: 30px;
+  min-height: 30px;
+  gap: 4px;
+  margin: -8px 0 16px auto;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 8px;
+}
+
+.payment-mode-button {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.payment-mode-button.active {
+  background: #d9006c;
+  color: white;
+}
+
+.payment-mode-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.payment-method-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 16px;
+}
+
+.payment-method-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.payment-method-toggle {
+  margin: 0;
+}
+
 .form-row {
   margin-bottom: 16px;
   display: flex;

@@ -8,17 +8,17 @@ import {
   writeBatch, // <-- atomic writes
 } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useUser } from '../context/UserContext';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import {
+  formatEuropeanDate,
+  getOtherPaymentMonth,
+  OTHER_PAYMENT_REASONS,
+} from '../utils/otherPaymentsUtils';
+import { invalidateOtherPaymentHistory } from '../utils/otherPaymentsCache';
+import { PAYMENT_METHODS } from '../utils/paymentMethodUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './AddPaymentPage.css';
-
-function formatDate(dateStr) {
-  const date = new Date(dateStr);
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const yyyy = date.getFullYear();
-  return `${dd}.${mm}.${yyyy}`;
-}
 
 function AddPaymentPage() {
   const {
@@ -35,7 +35,11 @@ function AddPaymentPage() {
   } = useData();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useUser();
+  const isCoach = user?.role === 'coach';
 
+  const [paymentMode, setPaymentMode] = useState('group');
+  const [paymentMethod, setPaymentMethod] = useState(isCoach ? 'cash' : 'card');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [amount, setAmount] = useState('');
@@ -45,10 +49,17 @@ function AddPaymentPage() {
   const [startTime, setStartTime] = useState('');
   const [paidDate, setPaidDate] = useState('');
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false); // <-- prevent double-clicks
   const [errors, setErrors] = useState({});
   const appliedPrefillQuery = useRef(null);
   const submissionInProgress = useRef(false);
+
+  useEffect(() => {
+    if (!isCoach) return;
+    setPaymentMode('group');
+    setPaymentMethod('cash');
+  }, [isCoach]);
 
   const clearError = (field) => {
     setErrors(current => {
@@ -80,7 +91,12 @@ function AddPaymentPage() {
     const params = new URLSearchParams(location.search);
     const studentIdFromURL = params.get('studentId');
     const nameFromURL = params.get('studentName');
+    const paymentModeFromURL = params.get('mode');
     appliedPrefillQuery.current = location.search;
+
+    if (!isCoach && paymentModeFromURL === 'other') {
+      setPaymentMode('other');
+    }
 
     if (!studentIdFromURL && !nameFromURL) return;
 
@@ -94,7 +110,7 @@ function AddPaymentPage() {
     } else if (nameFromURL) {
       setSearchTerm(nameFromURL);
     }
-  }, [students, studentsLoaded, location.search]);
+  }, [isCoach, students, studentsLoaded, location.search]);
 
   const handleRefreshStudents = async () => {
     try {
@@ -109,12 +125,17 @@ function AddPaymentPage() {
     if (submissionInProgress.current || !studentsLoaded || studentsLoading) return;
 
     const nextErrors = {};
+    const isOtherPayment = !isCoach && paymentMode === 'other';
     if (!selectedStudent) nextErrors.student = 'Select a student from the list.';
     if (!amount) nextErrors.amount = 'Amount is required.';
-    if (!type) nextErrors.type = 'Select the number of classes.';
     if (!startDate) nextErrors.startDate = 'Start date is required.';
     if (!paidDate) nextErrors.paidDate = 'Payment date is required.';
-    if (selectedGroups.length === 0) nextErrors.groups = 'Select at least one group.';
+    if (isOtherPayment) {
+      if (!reason) nextErrors.reason = 'Select a payment reason.';
+    } else {
+      if (!type) nextErrors.type = 'Select the number of classes.';
+      if (selectedGroups.length === 0) nextErrors.groups = 'Select at least one group.';
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -122,12 +143,20 @@ function AddPaymentPage() {
     }
 
     const amountNum = parseFloat(String(amount).replace(',', '.'));
-    const typeNum = parseInt(String(type), 10);
-    const discountNum = parseFloat(String(discount || '0').replace(',', '.'));
+    const typeNum = isOtherPayment ? null : parseInt(String(type), 10);
+    const discountNum = isOtherPayment
+      ? 0
+      : parseFloat(String(discount || '0').replace(',', '.'));
 
-    if (Number.isNaN(amountNum)) nextErrors.amount = 'Enter a valid amount.';
-    if (Number.isNaN(typeNum) || typeNum <= 0) nextErrors.type = 'Select a valid type.';
-    if (Number.isNaN(discountNum)) nextErrors.discount = 'Enter a valid discount.';
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      nextErrors.amount = 'Enter a valid amount greater than zero.';
+    }
+    if (!isOtherPayment && (Number.isNaN(typeNum) || typeNum <= 0)) {
+      nextErrors.type = 'Select a valid type.';
+    }
+    if (!isOtherPayment && Number.isNaN(discountNum)) {
+      nextErrors.discount = 'Enter a valid discount.';
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -138,37 +167,61 @@ function AddPaymentPage() {
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
-
-      // Prepare new payment doc with an ID
-      const paymentRef = doc(collection(db, 'payments'));
-
-      const paymentData = {
+      const timestamp = Timestamp.now();
+      const commonPaymentData = {
         studentId: selectedStudent.id,
         amount: amountNum,
-        type: typeNum,
-        discount: discountNum,
-        groups: selectedGroups,
-        dateFrom: formatDate(startDate),
-        ...(startTime ? { timeFrom: startTime } : {}),
-        createdAt: formatDate(paidDate),
-        timestamp: Timestamp.now(),
+        dateFrom: formatEuropeanDate(startDate),
+        createdAt: formatEuropeanDate(paidDate),
+        timestamp,
         status: 'active',
+        paymentMethod: isCoach ? 'cash' : paymentMethod,
       };
 
-      // Atomic: set payment + update student together
-      batch.set(paymentRef, paymentData);
-      batch.update(doc(db, 'students', selectedStudent.id), {
-        groups: arrayUnion(...selectedGroups),
-        lastPaymentId: paymentRef.id,
-      });
+      let paymentData;
+      let savedPaymentId;
+      if (isOtherPayment) {
+        savedPaymentId = doc(collection(db, 'otherpayments')).id;
+        const month = getOtherPaymentMonth(commonPaymentData.dateFrom);
+        paymentData = {
+          ...commonPaymentData,
+          reason,
+          paymentKind: 'other',
+        };
+        batch.set(doc(db, 'otherpayments', month), {
+          month,
+          updatedAt: timestamp,
+          payments: {
+            [savedPaymentId]: paymentData,
+          },
+        }, { merge: true });
+      } else {
+        const paymentRef = doc(collection(db, 'payments'));
+        savedPaymentId = paymentRef.id;
+        paymentData = {
+          ...commonPaymentData,
+          type: typeNum,
+          discount: discountNum,
+          groups: selectedGroups,
+          ...(startTime ? { timeFrom: startTime } : {}),
+        };
+        batch.set(paymentRef, paymentData);
+        batch.update(doc(db, 'students', selectedStudent.id), {
+          groups: arrayUnion(...selectedGroups),
+          lastPaymentId: savedPaymentId,
+        });
+      }
 
       await batch.commit(); // all-or-nothing
 
-      upsertPayment({ id: paymentRef.id, ...paymentData });
-      patchStudent(selectedStudent.id, currentStudent => ({
-        groups: [...new Set([...(currentStudent.groups || []), ...selectedGroups])],
-        lastPaymentId: paymentRef.id,
-      }));
+      if (!isOtherPayment) {
+        upsertPayment({ id: savedPaymentId, ...paymentData });
+        patchStudent(selectedStudent.id, currentStudent => ({
+          groups: [...new Set([...(currentStudent.groups || []), ...selectedGroups])],
+          lastPaymentId: savedPaymentId,
+        }));
+      }
+      if (isOtherPayment) invalidateOtherPaymentHistory();
       invalidateSalarySummaries();
 
       // Reset form
@@ -181,10 +234,18 @@ function AddPaymentPage() {
       setStartTime('');
       setPaidDate('');
       setSelectedGroups([]);
+      setReason('');
       setErrors({});
 
-      // Go back to student detail
-      navigate(`/student/${paymentData.studentId}`);
+      const requestedReturnPath = new URLSearchParams(location.search).get('returnTo');
+      const safeReturnPath = requestedReturnPath?.startsWith('/student/')
+        ? requestedReturnPath
+        : '';
+      navigate(
+        isOtherPayment
+          ? safeReturnPath || '/payment-history'
+          : `/student/${paymentData.studentId}`
+      );
     } catch (err) {
       console.error(err);
       alert('❌ Error saving payment. Nothing was saved.');
@@ -197,6 +258,35 @@ function AddPaymentPage() {
   return (
     <div className="add-payment-page">
       <h2 className="title">ADD A PAYMENT</h2>
+
+      {!isCoach && (
+        <div className="payment-mode-toggle" role="group" aria-label="Payment type">
+          <button
+            type="button"
+            className={`payment-mode-button${paymentMode === 'group' ? ' active' : ''}`}
+            aria-pressed={paymentMode === 'group'}
+            onClick={() => {
+              setPaymentMode('group');
+              setErrors({});
+            }}
+            disabled={isSubmitting}
+          >
+            Group
+          </button>
+          <button
+            type="button"
+            className={`payment-mode-button${paymentMode === 'other' ? ' active' : ''}`}
+            aria-pressed={paymentMode === 'other'}
+            onClick={() => {
+              setPaymentMode('other');
+              setErrors({});
+            }}
+            disabled={isSubmitting}
+          >
+            Other
+          </button>
+        </div>
+      )}
 
       <RefreshStatus
         message={studentsLoaded
@@ -258,6 +348,27 @@ function AddPaymentPage() {
         />
       </div>
 
+      <div className="payment-method-row">
+        <span className="payment-method-label">PAID BY:</span>
+        <div className="payment-mode-toggle payment-method-toggle" role="group" aria-label="Payment method">
+          {PAYMENT_METHODS.map(method => {
+            const disabled = isSubmitting || (isCoach && method.value !== 'cash');
+            return (
+              <button
+                key={method.value}
+                type="button"
+                className={`payment-mode-button${paymentMethod === method.value ? ' active' : ''}`}
+                aria-pressed={paymentMethod === method.value}
+                onClick={() => setPaymentMethod(method.value)}
+                disabled={disabled}
+              >
+                {method.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className={`form-row ${paidDate ? 'required-filled' : 'required-empty'}`}>
         <label>PAYMENT DATE:</label>
         <input
@@ -286,66 +397,88 @@ function AddPaymentPage() {
         />
       </div>
 
-      <div className="form-row optional-field">
-        <label>Time from <span>optional</span></label>
-        <input
-          type="time"
-          className="input optional-input"
-          value={startTime}
-          onChange={e => setStartTime(e.target.value)}
-        />
-      </div>
-
-      <div className={`form-row ${type ? 'required-filled' : 'required-empty'}`}>
-        <label>TYPE:</label>
-        <select
-          className="input"
-          value={type}
-          onChange={e => {
-            setType(e.target.value);
-            clearError('type');
-          }}
-          aria-invalid={Boolean(errors.type)}
-        >
-          <option value="">Select...</option>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 12, 24].map((num) => (
-            <option key={num} value={num}>
-              {num} CLASSES
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className={`form-row ${selectedGroups.length > 0 ? 'required-filled' : 'required-empty'}`}>
-        <label>GROUPS:</label>
-        <div className="group-box" aria-invalid={Boolean(errors.groups)}>
-          {sortedGroups.map(group => (
-            <label key={group.id} className="group-checkbox">
-              <input
-                type="checkbox"
-                checked={selectedGroups.includes(group.id)}
-                onChange={() => toggleGroup(group.id)}
-              />
-              {group.name}
-            </label>
-          ))}
+      {paymentMode === 'other' ? (
+        <div className={`form-row ${reason ? 'required-filled' : 'required-empty'}`}>
+          <label>REASON:</label>
+          <select
+            className="input"
+            value={reason}
+            onChange={e => {
+              setReason(e.target.value);
+              clearError('reason');
+            }}
+            aria-invalid={Boolean(errors.reason)}
+          >
+            <option value="">Select...</option>
+            {OTHER_PAYMENT_REASONS.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="form-row optional-field">
+            <label>Time from <span>optional</span></label>
+            <input
+              type="time"
+              className="input optional-input"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+            />
+          </div>
 
-      <div className={`form-row optional-field${errors.discount ? ' has-error' : ''}`}>
-        <label>Discount (%) <span>optional</span></label>
-        <input
-          className="input optional-input"
-          value={discount}
-          onChange={e => {
-            setDiscount(e.target.value);
-            clearError('discount');
-          }}
-          placeholder="0"
-          inputMode="decimal"
-          aria-invalid={Boolean(errors.discount)}
-        />
-      </div>
+          <div className={`form-row ${type ? 'required-filled' : 'required-empty'}`}>
+            <label>TYPE:</label>
+            <select
+              className="input"
+              value={type}
+              onChange={e => {
+                setType(e.target.value);
+                clearError('type');
+              }}
+              aria-invalid={Boolean(errors.type)}
+            >
+              <option value="">Select...</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 12, 24].map((num) => (
+                <option key={num} value={num}>
+                  {num} CLASSES
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={`form-row ${selectedGroups.length > 0 ? 'required-filled' : 'required-empty'}`}>
+            <label>GROUPS:</label>
+            <div className="group-box" aria-invalid={Boolean(errors.groups)}>
+              {sortedGroups.map(group => (
+                <label key={group.id} className="group-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.includes(group.id)}
+                    onChange={() => toggleGroup(group.id)}
+                  />
+                  {group.name}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className={`form-row optional-field${errors.discount ? ' has-error' : ''}`}>
+            <label>Discount (%) <span>optional</span></label>
+            <input
+              className="input optional-input"
+              value={discount}
+              onChange={e => {
+                setDiscount(e.target.value);
+                clearError('discount');
+              }}
+              placeholder="0"
+              inputMode="decimal"
+              aria-invalid={Boolean(errors.discount)}
+            />
+          </div>
+        </>
+      )}
 
       <button
         className="confirm-button"

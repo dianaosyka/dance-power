@@ -87,6 +87,145 @@ table td {
   justify-content: space-between;
   margin-top: 10px;
 }
+
+.student-other-payments {
+  box-sizing: border-box;
+  max-width: 380px;
+  margin: 18px auto 0;
+  padding: 14px;
+  border: 1px solid #9b59b6;
+  border-radius: 12px;
+  background: #2b0846;
+  color: white;
+}
+
+.student-payment-view-toggle {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: fit-content;
+  height: 32px;
+  margin: 8px auto 10px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+}
+
+.student-payment-view-toggle button {
+  box-sizing: border-box;
+  min-height: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.student-payment-view-toggle button.active {
+  background: #d9006c;
+  color: #fff;
+}
+
+.student-other-payments-header,
+.student-other-payment-summary,
+.student-other-payments-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-other-payments-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.student-other-payments-header span,
+.student-other-payment-row span {
+  display: block;
+  margin-top: 3px;
+  color: #ddd;
+  font-size: 11px;
+}
+
+.student-other-payment-add,
+.student-other-payment-delete,
+.student-other-payments-error button {
+  min-height: 0;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.student-other-payment-add {
+  background: #d9006c;
+}
+
+.student-other-payments-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.student-other-payment-row {
+  padding: 11px 0;
+  border-top: 1px solid rgba(155, 89, 182, 0.65);
+}
+
+.student-other-payment-row:first-child {
+  border-top: 0;
+}
+
+.student-other-payment-row.is-selected {
+  margin-right: -8px;
+  margin-left: -8px;
+  padding-right: 8px;
+  padding-left: 8px;
+  border-radius: 8px;
+  background: rgba(217, 0, 108, 0.24);
+  outline: 2px solid #d9006c;
+}
+
+.student-other-payment-summary > div {
+  min-width: 0;
+}
+
+.student-other-payment-amount {
+  flex-shrink: 0;
+  color: #8ef58e;
+}
+
+.student-other-payment-delete {
+  display: block;
+  margin: 8px 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(255, 120, 140, 0.8);
+  color: #ffb2bf;
+}
+
+.student-other-payment-delete:disabled,
+.student-other-payment-add:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.student-other-payments-message {
+  margin: 12px 0 0;
+  color: #ddd;
+  font-size: 12px;
+}
+
+.student-other-payments-error {
+  margin-top: 12px;
+  color: #ffb2bf;
+  font-size: 12px;
+}
 .top-row{
   display: flex;
   justify-content: space-between;

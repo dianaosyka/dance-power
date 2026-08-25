@@ -186,3 +186,38 @@
   display: block;
   font-size: 15px;
 }
+
+.salary-other-payments-total {
+  color: #8ef58e;
+  font-size: 14px;
+}
+
+.salary-other-payment-row {
+  padding: 10px 0;
+  border-bottom: 1px solid #9b59b6;
+  font-size: 14px;
+}
+
+.salary-other-payment-main,
+.salary-other-payment-dates {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.salary-other-payment-main > strong {
+  flex-shrink: 0;
+  color: #8ef58e;
+}
+
+.salary-other-payment-main span,
+.salary-other-payment-dates span {
+  display: block;
+  color: #ddd;
+  font-size: 12px;
+}
+
+.salary-other-payment-dates {
+  margin-top: 6px;
+  color: #ddd;
+}

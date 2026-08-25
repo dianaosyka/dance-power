@@ -1,9 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { doc, getDocFromServer } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import { getCoachPayForClass, getCoachRatePerPerson } from '../utils/coachSalaryUtils';
+import {
+  getEuropeanMonthFromMonthValue,
+  getOtherPaymentReasonLabel,
+  getOtherPaymentsFromMonthDocument,
+  getOtherPaymentsForMonth,
+  getOtherPaymentsTotal,
+} from '../utils/otherPaymentsUtils';
+import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './SalaryPage.css';
 
@@ -20,7 +29,7 @@ function getSalarySummaryStorageKey(user, monthValue) {
   if (!user?.role || !monthValue) return null;
 
   const userKey = user.id || user.role;
-  return `salarySummary:${user.role}:${userKey}:${monthValue}`;
+  return `salarySummary:v4:${user.role}:${userKey}:${monthValue}`;
 }
 
 function getSavedSalarySummary(storageKey) {
@@ -109,6 +118,7 @@ function SalaryPage() {
     payments,
     students,
     coaches,
+    db,
     groupsLoaded,
     coachesLoaded,
     groupsError,
@@ -225,6 +235,34 @@ function SalaryPage() {
     try {
       const calculationStudents = studentsOverride ?? students;
       const calculationPayments = paymentsOverride ?? payments;
+      const otherPaymentsSnapshot = await getDocFromServer(
+        doc(db, 'otherpayments', getEuropeanMonthFromMonthValue(runMonth))
+      );
+      const calculationOtherPayments = getOtherPaymentsFromMonthDocument(
+        otherPaymentsSnapshot
+      );
+      const otherPaymentsTotal = getOtherPaymentsTotal(
+        calculationOtherPayments,
+        runMonth
+      );
+      const studentNamesById = new Map(
+        calculationStudents.map(student => [student.id, student.name || 'Unknown'])
+      );
+      const otherPaymentRows = getOtherPaymentsForMonth(
+        calculationOtherPayments,
+        runMonth
+      )
+        .map(payment => ({
+          id: payment.id,
+          studentId: payment.studentId,
+          studentName: studentNamesById.get(payment.studentId) || 'Unknown',
+          amount: Number(payment.amount),
+          reason: getOtherPaymentReasonLabel(payment.reason),
+          paymentMethod: getPaymentMethodLabel(payment.paymentMethod),
+          dateFrom: payment.dateFrom,
+          paymentDate: payment.createdAt,
+        }))
+        .sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
       const coachTotals = new Map(
         (coaches || []).map(coach => [
           coach.id,
@@ -239,7 +277,7 @@ function SalaryPage() {
       );
 
       const classRows = [];
-      let grossTotal = 0;
+      let grossTotal = otherPaymentsTotal;
       let rentTotal = 580;
       let coachesTotal = 0;
 
@@ -346,6 +384,8 @@ function SalaryPage() {
       const nextSummary = {
         generatedAt: Date.now(),
         grossTotal,
+        otherPaymentsTotal,
+        otherPaymentRows,
         rentTotal,
         coachesTotal,
         earnedTotal: grossTotal - rentTotal - coachesTotal,
@@ -388,6 +428,7 @@ function SalaryPage() {
     groups,
     groupsLoaded,
     coachesLoaded,
+    db,
     invalidatePastClasses,
     isCoach,
     loadPastClassDocs,
@@ -443,7 +484,7 @@ function SalaryPage() {
       });
     } catch (err) {
       console.error('Failed to refresh salary data:', err);
-      setError('Failed to refresh students or payments. The previous summary is unchanged.');
+      setError('Failed to refresh salary data. The previous summary is unchanged.');
     } finally {
       setIsRefreshingData(false);
     }
@@ -530,6 +571,10 @@ function SalaryPage() {
               <div>
                 <span>Gross</span>
                 <strong>{summary.grossTotal.toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>Other payments</span>
+                <strong>{Number(summary.otherPaymentsTotal || 0).toFixed(2)}€</strong>
               </div>
               <div>
                 <span>For coaches</span>
@@ -632,6 +677,38 @@ function SalaryPage() {
               ))
             )}
           </ul>
+
+          {isAdmin && (
+            <>
+              <div className="salary-lessons-header">
+                <h3 className="salary-heading">OTHER PAYMENTS</h3>
+                <strong className="salary-other-payments-total">
+                  {Number(summary.otherPaymentsTotal || 0).toFixed(2)}€
+                </strong>
+              </div>
+              <ul className="salary-list">
+                {(summary.otherPaymentRows || []).length === 0 ? (
+                  <li className="salary-row">No other payments in this month.</li>
+                ) : (
+                  summary.otherPaymentRows.map(payment => (
+                    <li key={payment.id} className="salary-other-payment-row">
+                      <div className="salary-other-payment-main">
+                        <div>
+                          <strong>{payment.studentName}</strong>
+                          <span>{payment.reason} · {payment.paymentMethod || 'Card'}</span>
+                        </div>
+                        <strong>{Number(payment.amount).toFixed(2)}€</strong>
+                      </div>
+                      <div className="salary-other-payment-dates">
+                        <span>Date from: {payment.dateFrom}</span>
+                        <span>Paid: {payment.paymentDate}</span>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </>
+          )}
         </>
       )}
     </div>

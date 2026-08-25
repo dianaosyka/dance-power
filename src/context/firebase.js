@@ -70,7 +70,7 @@ function staffRouteRequirements(pathname, role) {
   return {
     students:
       normalizedPath === '/students' ||
-      (normalizedPath === '/add-payment' && role === 'admin') ||
+      (normalizedPath === '/add-payment' && (role === 'admin' || role === 'coach')) ||
       isClassDetail ||
       isPaymentHistory,
     payments: isClassDetail || isPaymentHistory,

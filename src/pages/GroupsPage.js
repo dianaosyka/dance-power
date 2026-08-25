@@ -59,7 +59,7 @@ function GroupsPage() {
           </button>
         )}
 
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'coach') && (
           <div className="add-button-container">
             <button
               className="add-button"

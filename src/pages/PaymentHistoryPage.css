@@ -72,15 +72,38 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
+.transaction-card-link {
+  cursor: pointer;
+}
+
+.transaction-card-link:hover,
+.transaction-card-link:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 2px;
+}
+
 .top-line {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   font-weight: bold;
   margin-bottom: 10px;
 }
 
+.transaction-summary {
+  min-width: 0;
+  font-weight: normal;
+}
+
+.transaction-summary .date {
+  display: block;
+  font-weight: bold;
+}
+
 .amountSum {
   color: #4caf50;
+  flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .date {

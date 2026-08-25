@@ -1,11 +1,26 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { deleteDoc, doc, runTransaction } from 'firebase/firestore';
-import { useData } from '../context/firebase';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
+import {
+  deleteDoc,
+  deleteField,
+  doc,
+  FieldPath,
+  runTransaction,
+  updateDoc,
+} from 'firebase/firestore';
+import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import './StudentDetailPage.css';
 import { getPaymentClasses, isClassUpcoming } from '../utils/paymentsUtils';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
+import { getOtherPaymentReasonLabel } from '../utils/otherPaymentsUtils';
+import {
+  getOtherPaymentHistoryCache,
+  hasFreshOtherPaymentHistory,
+  invalidateOtherPaymentHistory,
+  loadOtherPaymentHistory,
+} from '../utils/otherPaymentsCache';
 import RefreshStatus from '../components/RefreshStatus';
 
 function getPaymentSortValue(payment) {
@@ -49,9 +64,17 @@ function StudentDetailPage() {
   } = useData();
   const { user, setUser } = useUser();
   const navigate = useNavigate();
+  const location = useLocation();
+  const paymentIdFromHistory = new URLSearchParams(location.search).get('paymentId') || '';
+  const otherPaymentIdFromHistory = new URLSearchParams(location.search).get('otherPaymentId') || '';
   const isStaff = user?.role === 'admin' || user?.role === 'coach';
+  const isAdmin = user?.role === 'admin';
+  const otherPaymentScope = user?.id || user?.role || 'signed-out';
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [paymentDetailView, setPaymentDetailView] = useState(
+    () => otherPaymentIdFromHistory ? 'other' : 'group'
+  );
   const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
@@ -71,11 +94,48 @@ function StudentDetailPage() {
   const [refreshingDetail, setRefreshingDetail] = useState(false);
   const [deletingPayment, setDeletingPayment] = useState(false);
   const [deletingStudent, setDeletingStudent] = useState(false);
+  const [otherPayments, setOtherPayments] = useState(
+    () => getOtherPaymentHistoryCache(otherPaymentScope).payments
+  );
+  const [otherPaymentsLoading, setOtherPaymentsLoading] = useState(false);
+  const [otherPaymentsError, setOtherPaymentsError] = useState('');
+  const [deletingOtherPaymentId, setDeletingOtherPaymentId] = useState('');
   const studentLoadGeneration = useRef(0);
   const paymentsLoadGeneration = useRef(0);
   const detailRefreshInProgress = useRef(false);
   const paymentDeletionInProgress = useRef(false);
   const studentDeletionInProgress = useRef(false);
+  const selectedOtherPaymentElement = useRef(null);
+  const appliedPaymentLink = useRef('');
+  const appliedOtherPaymentLink = useRef('');
+
+  const loadOtherPayments = useCallback(async ({ force = false } = {}) => {
+    if (!isAdmin) return [];
+    if (!force && hasFreshOtherPaymentHistory(otherPaymentScope, STAFF_DATA_CACHE_TTL_MS)) {
+      const cachedHistory = getOtherPaymentHistoryCache(otherPaymentScope);
+      setOtherPayments(cachedHistory.payments);
+      return cachedHistory.payments;
+    }
+
+    setOtherPaymentsLoading(true);
+    setOtherPaymentsError('');
+    try {
+      const result = await loadOtherPaymentHistory(db, otherPaymentScope);
+      setOtherPayments(result.payments);
+      return result.payments;
+    } catch (error) {
+      setOtherPaymentsError(error?.message || String(error));
+      throw error;
+    } finally {
+      setOtherPaymentsLoading(false);
+    }
+  }, [db, isAdmin, otherPaymentScope]);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    loadOtherPayments().catch(() => {});
+    return undefined;
+  }, [isAdmin, loadOtherPayments]);
 
   const loadScopedStudent = useCallback(async ({ force = false } = {}) => {
     if (!isStaff) return null;
@@ -200,6 +260,35 @@ function StudentDetailPage() {
     : 0;
   const currentPayment =
     studentPayments.length > 0 ? studentPayments[boundedCurrentIndex] : null;
+  const studentOtherPayments = sortPaymentsNewestFirst(
+    otherPayments.filter(payment => payment.studentId === studentId)
+  );
+
+  useEffect(() => {
+    if (!paymentIdFromHistory) return;
+    const linkKey = `${studentId}:${paymentIdFromHistory}`;
+    if (appliedPaymentLink.current === linkKey) return;
+
+    const paymentIndex = studentPayments.findIndex(payment => payment.id === paymentIdFromHistory);
+    if (paymentIndex >= 0) {
+      setCurrentIndex(paymentIndex);
+      appliedPaymentLink.current = linkKey;
+    }
+  }, [paymentIdFromHistory, studentId, studentPayments]);
+
+  useEffect(() => {
+    if (!otherPaymentIdFromHistory || otherPaymentsLoading) return;
+    const linkKey = `${studentId}:${otherPaymentIdFromHistory}`;
+    if (appliedOtherPaymentLink.current === linkKey || !selectedOtherPaymentElement.current) return;
+
+    selectedOtherPaymentElement.current.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    appliedOtherPaymentLink.current = linkKey;
+  }, [otherPaymentIdFromHistory, otherPaymentsLoading, studentId, studentOtherPayments]);
+
+  useEffect(() => {
+    if (otherPaymentIdFromHistory) setPaymentDetailView('other');
+    else if (paymentIdFromHistory) setPaymentDetailView('group');
+  }, [otherPaymentIdFromHistory, paymentIdFromHistory]);
 
   useEffect(() => {
     if (currentIndex !== boundedCurrentIndex) {
@@ -418,8 +507,37 @@ function StudentDetailPage() {
   };
 
   const handleAddPayment = () => {
-    if (user?.role !== 'admin' || !student) return;
+    if (!isStaff || !student) return;
     navigate(`/add-payment?studentId=${encodeURIComponent(student.id)}`);
+  };
+
+  const handleAddOtherPayment = () => {
+    if (!isAdmin || !student) return;
+    const returnTo = encodeURIComponent(`/student/${student.id}`);
+    navigate(`/add-payment?studentId=${encodeURIComponent(student.id)}&mode=other&returnTo=${returnTo}`);
+  };
+
+  const handleDeleteOtherPayment = async (payment) => {
+    if (!isAdmin || deletingOtherPaymentId || !payment?.id || !payment?.month) return;
+    if (!window.confirm('Are you sure you want to delete this other payment?')) return;
+
+    setDeletingOtherPaymentId(payment.id);
+    try {
+      await updateDoc(
+        doc(db, 'otherpayments', payment.month),
+        new FieldPath('payments', payment.id),
+        deleteField()
+      );
+      setOtherPayments(current => current.filter(item => item.id !== payment.id));
+      invalidateOtherPaymentHistory();
+      invalidateSalarySummaries();
+      alert('✅ Other payment deleted');
+    } catch (error) {
+      console.error('Failed to delete other payment:', error);
+      alert('❌ Error deleting other payment');
+    } finally {
+      setDeletingOtherPaymentId('');
+    }
   };
 
   const isStudentAccount = user?.role !== 'admin' && user?.role !== 'coach';
@@ -450,6 +568,7 @@ function StudentDetailPage() {
       await Promise.allSettled([
         handleRefreshStudents(),
         handleRefreshPayments(),
+        ...(isAdmin ? [loadOtherPayments({ force: true })] : []),
       ]);
     } finally {
       detailRefreshInProgress.current = false;
@@ -458,7 +577,7 @@ function StudentDetailPage() {
   };
 
   const detailDataLoading =
-    refreshingDetail || studentDataLoading || paymentDataLoading;
+    refreshingDetail || studentDataLoading || paymentDataLoading || otherPaymentsLoading;
   const formatCheckedAt = timestamp => timestamp
     ? new Date(timestamp).toLocaleString()
     : 'not updated yet';
@@ -476,6 +595,94 @@ function StudentDetailPage() {
       refreshLabel="Refresh student data"
     />
   );
+  const paymentViewToggle = isAdmin ? (
+    <div className="student-payment-view-toggle" aria-label="Payment type">
+      <button
+        type="button"
+        className={paymentDetailView === 'group' ? 'active' : ''}
+        aria-pressed={paymentDetailView === 'group'}
+        onClick={() => setPaymentDetailView('group')}
+      >
+        Group
+      </button>
+      <button
+        type="button"
+        className={paymentDetailView === 'other' ? 'active' : ''}
+        aria-pressed={paymentDetailView === 'other'}
+        onClick={() => setPaymentDetailView('other')}
+      >
+        Other
+      </button>
+    </div>
+  ) : null;
+  const otherPaymentsSection = isAdmin ? (
+    <section className="student-other-payments" aria-labelledby="student-other-payments-title">
+      <div className="student-other-payments-header">
+        <div>
+          <h3 id="student-other-payments-title">OTHER PAYMENTS</h3>
+          <span>{studentOtherPayments.length} total</span>
+        </div>
+        <button
+          type="button"
+          className="student-other-payment-add"
+          onClick={handleAddOtherPayment}
+          disabled={!student || deletingOtherPaymentId !== ''}
+        >
+          + Add other
+        </button>
+      </div>
+
+      {otherPaymentsLoading && studentOtherPayments.length === 0 && (
+        <p className="student-other-payments-message">Loading other payments…</p>
+      )}
+      {otherPaymentsError && (
+        <div className="student-other-payments-error" role="alert">
+          <span>{otherPaymentsError}</span>
+          <button
+            type="button"
+            onClick={() => loadOtherPayments({ force: true }).catch(() => {})}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!otherPaymentsLoading && !otherPaymentsError && studentOtherPayments.length === 0 && (
+        <p className="student-other-payments-message">No other payments.</p>
+      )}
+
+      {studentOtherPayments.length > 0 && (
+        <ul className="student-other-payments-list">
+          {studentOtherPayments.map(payment => (
+            <li
+              key={`${payment.month}-${payment.id}`}
+              ref={payment.id === otherPaymentIdFromHistory ? selectedOtherPaymentElement : null}
+              className={`student-other-payment-row${payment.id === otherPaymentIdFromHistory ? ' is-selected' : ''}`}
+            >
+              <div className="student-other-payment-summary">
+                <div>
+                  <strong>{getOtherPaymentReasonLabel(payment.reason)}</strong>
+                  <span>Date from: {payment.dateFrom}</span>
+                  <span>Paid: {payment.createdAt}</span>
+                  <span>Paid by: {getPaymentMethodLabel(payment.paymentMethod)}</span>
+                </div>
+                <strong className="student-other-payment-amount">
+                  {Number(payment.amount).toFixed(2)}€
+                </strong>
+              </div>
+              <button
+                type="button"
+                className="student-other-payment-delete"
+                onClick={() => handleDeleteOtherPayment(payment)}
+                disabled={Boolean(deletingOtherPaymentId)}
+              >
+                {deletingOtherPaymentId === payment.id ? 'Deleting…' : 'Delete'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  ) : null;
 
   if (!studentDataLoaded) {
     if (studentDataError) {
@@ -536,7 +743,8 @@ function StudentDetailPage() {
     return (
       <div>
         {detailDataStatus}
-        <div className="student-card">
+        {paymentViewToggle}
+        <div className="student-card" hidden={isAdmin && paymentDetailView === 'other'}>
           <div className="top-row">
             <p>{student.phone}</p>
             {isStudentAccount && (
@@ -546,7 +754,7 @@ function StudentDetailPage() {
           <h2>{student.name.toUpperCase()}</h2>
           <StudentContacts />
           <h3>No payments.</h3>
-          {user?.role === 'admin' && (
+          {(user?.role === 'admin' || user?.role === 'coach') && (
             <button
               onClick={handleAddPayment}
               disabled={deletingStudent}
@@ -555,6 +763,8 @@ function StudentDetailPage() {
             </button>
           )}
         </div>
+
+        {paymentDetailView === 'other' && otherPaymentsSection}
 
         {user?.role === 'admin' && (
           <div style={{ marginTop: '10px', textAlign: 'center' }}>
@@ -574,7 +784,8 @@ function StudentDetailPage() {
   return (
     <div>
       {detailDataStatus}
-      <div className="student-card">
+      {paymentViewToggle}
+      <div className="student-card" hidden={isAdmin && paymentDetailView === 'other'}>
         <div className="top-row">
           <p>{student.phone}</p>
           {user?.role !== 'coach' && user?.role !== 'admin' && (
@@ -587,6 +798,7 @@ function StudentDetailPage() {
         <h2>{student.name.toUpperCase()}</h2>
         <StudentContacts />
         {currentPayment?.createdAt && <p>PAYMENT DATE: {currentPayment.createdAt}</p>}
+        <p>PAID BY: {getPaymentMethodLabel(currentPayment?.paymentMethod).toUpperCase()}</p>
         <p>
           START DATE: {currentPayment.dateFrom}
           {currentPayment.timeFrom ? ` ${currentPayment.timeFrom}` : ''}
@@ -686,8 +898,10 @@ function StudentDetailPage() {
         </div>
       </div>
 
-      {user?.role === 'admin' && (
-        <div>
+      {paymentDetailView === 'other' && otherPaymentsSection}
+
+      <div>
+        {(user?.role === 'coach' || (isAdmin && paymentDetailView === 'group')) && (
           <div style={{ textAlign: 'center', marginTop: '20px' }}>
             <button
               onClick={handleAddPayment}
@@ -697,6 +911,8 @@ function StudentDetailPage() {
               ➕ ADD PAYMENT
             </button>
           </div>
+        )}
+        {user?.role === 'admin' && (
           <div style={{ marginTop: '10px', textAlign: 'center' }}>
             <button
               onClick={handleDeleteStudent}
@@ -706,8 +922,8 @@ function StudentDetailPage() {
               {deletingStudent ? 'DELETING STUDENT…' : 'DELETE STUDENT'}
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
