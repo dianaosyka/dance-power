@@ -109,6 +109,30 @@
   margin-bottom: 18px;
 }
 
+.main-warnings .refresh-status {
+  margin-bottom: 0;
+}
+
+.warnings-scope-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.warnings-scope-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #56edff;
+}
+
 .warnings-summary {
   display: grid;
   grid-template-columns: auto 1fr auto;

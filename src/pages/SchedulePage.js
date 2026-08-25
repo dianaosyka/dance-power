@@ -14,6 +14,7 @@ import './SchedulePage.css';
 
 const DAY_NAMES = ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'];
 const SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
+const CLASS_TRACKING_START = new Date(2026, 5, 1);
 
 // Associate in-flight reads with the shared cache instance so remounting the
 // route reuses them. A new cache Map for a new user gets a fresh registry.
@@ -278,11 +279,16 @@ function SchedulePage() {
     const dateCells = visibleDates.map(date => {
       const key = dateKey(date);
       const recorded = visiblePastClasses.filter(item => item.date === key);
-      const recurring = date >= today
+      const recurring = date >= CLASS_TRACKING_START
         ? visibleGroups
           .filter(group => (group.dayOfWeek ?? 5) === date.getDay())
           .filter(group => !existingByDateAndGroup.has(`${key}-${group.id}`))
-          .map(group => ({ date: key, group, isFuture: true }))
+          .map(group => ({
+            date: key,
+            group,
+            isFuture: date >= today,
+            isMissing: date < today,
+          }))
         : [];
       const classes = [...recorded, ...recurring]
         .map(item => ({
@@ -388,13 +394,13 @@ function SchedulePage() {
                           <button
                             type="button"
                             key={`${item.group.id}-${itemIndex}`}
-                            className={`schedule-event ${item.canceled ? 'is-canceled' : ''} ${item.isFuture ? 'is-future' : 'is-recorded'} ${item.replacement ? `has-replacement--${item.replacement.status}` : ''}`}
+                            className={`schedule-event ${item.canceled ? 'is-canceled' : ''} ${item.isMissing ? 'is-missing' : item.isFuture ? 'is-future' : 'is-recorded'} ${item.replacement ? `has-replacement--${item.replacement.status}` : ''}`}
                             onClick={() => navigate(`/group/${item.group.id}/class/${cell.key}`)}
                             title={`${item.group.name} · ${classTime(item)} · ${names}`}
                           >
                             <strong>{classTime(item)}</strong>
                             <span>{item.group.name}</span>
-                            <small>{item.canceled ? 'Zrušené' : names}</small>
+                            <small>{item.canceled ? 'Zrušené' : item.isMissing ? `⚠ Hodina nebola pridaná · ${names}` : names}</small>
                             {replacementLabel && <em>{replacementLabel}</em>}
                           </button>
                         );
@@ -410,6 +416,7 @@ function SchedulePage() {
         <div className="schedule-legend">
           <span><i className="legend-recorded" /> Uskutočnená hodina</span>
           <span><i className="legend-future" /> Nadchádzajúca hodina</span>
+          <span><i className="legend-missing" /> Hodina nebola pridaná</span>
           <span><i className="legend-pending" /> Zastupovanie čaká</span>
           <span><i className="legend-confirmed" /> Zastupovanie potvrdené</span>
           <span><i className="legend-denied" /> Zastupovanie zamietnuté</span>

@@ -795,7 +795,7 @@ function GroupClassDetailPage() {
   // Respect the active view: an admin using Coach view has coach permissions.
   const isAdminAccount = user?.role === 'admin';
   const isGroupCoach = group?.coach === user?.id;
-  const canSuggestReplacement = isFutureDate(date) && (user?.role === 'coach' || isAdminAccount);
+  const canSuggestReplacement = user?.role === 'coach' || isAdminAccount;
   const canNominateOtherCoach = isAdminAccount || isGroupCoach;
   const replacementOptions = canNominateOtherCoach
     ? (coaches || [])
@@ -835,11 +835,13 @@ function GroupClassDetailPage() {
         onRefresh={handleRefreshData}
         refreshLabel="Refresh class data"
       />
-      {!classStatusLoading && !classStatusError && !classExists && isFutureDate(date) && canEditComment && (
+      {!classStatusLoading && !classStatusError && !classExists && canEditComment && (
         <section className="future-class-callout">
           <div>
-            <strong>Upcoming class</strong>
-            <span>This class has not been added yet.</span>
+            <strong>{isFutureDate(date) ? 'Upcoming class' : '⚠ Class was not added'}</strong>
+            <span>{isFutureDate(date)
+              ? 'This class has not been added yet.'
+              : 'Add the missed class or assign the coach who replaced it.'}</span>
           </div>
           <button
             type="button"
@@ -857,10 +859,10 @@ function GroupClassDetailPage() {
         </section>
       )}
 
-      {isFutureDate(date) && !replacementStateReady && !replacementError && (
+      {!replacementStateReady && !replacementError && (
         <p role="status">Loading replacement details...</p>
       )}
-      {replacementStateReady && isFutureDate(date) && (canSuggestReplacement || replacement) && (
+      {replacementStateReady && (canSuggestReplacement || replacement) && (
         <section className="replacement-card">
           <h3>Replacement coach</h3>
 

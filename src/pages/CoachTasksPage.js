@@ -60,8 +60,8 @@ function isComplete(classItem) {
   return parseDate(classItem.date) < ATTENDANCE_TRACKING_START;
 }
 
-function isRegularCoach(group, user) {
-  if (user?.role === 'admin') return true;
+function isRegularCoach(group, user, includeAllWarnings = false) {
+  if (includeAllWarnings && user?.role === 'admin') return true;
   const groupCoaches = Array.isArray(group.coach) ? group.coach : [group.coach];
   return groupCoaches.includes(user?.id) || user?.groups?.includes(group.id);
 }
@@ -78,12 +78,13 @@ function formatCheckedTime(timestamp) {
 
 function CoachTasksPage() {
   const { db, groups, coachTasksCache } = useData();
-  const { user } = useUser();
+  const { user, accountUser, viewAsCoach } = useUser();
   const navigate = useNavigate();
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [includeAllWarnings, setIncludeAllWarnings] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState(null);
   const [displayedWarningKey, setDisplayedWarningKey] = useState('');
   const [errorKey, setErrorKey] = useState('');
@@ -92,8 +93,11 @@ function CoachTasksPage() {
     () => groups.filter(group => group.hidden !== true),
     [groups]
   );
+  const canViewAllWarnings = accountUser?.role === 'admin' && !viewAsCoach;
+  const allWarningsEnabled = canViewAllWarnings && includeAllWarnings;
   const warningScopeKey = useMemo(() => JSON.stringify({
     user: `${user?.role || ''}:${user?.id || ''}`,
+    scope: allWarningsEnabled ? 'all' : 'mine',
     userGroups: [...(user?.groups || [])].sort(),
     today: formatDate(new Date()),
     groups: activeGroups
@@ -104,7 +108,7 @@ function CoachTasksPage() {
         dayOfWeek: group.dayOfWeek,
       }))
       .sort((first, second) => String(first.id).localeCompare(String(second.id))),
-  }), [activeGroups, user]);
+  }), [activeGroups, allWarningsEnabled, user]);
 
   const loadWarnings = useCallback(async ({ force = false } = {}) => {
     const cacheKey = warningScopeKey;
@@ -207,36 +211,42 @@ function CoachTasksPage() {
 
         // Use the existing replacement query for confirmed responsibility too.
         // This does not add another Firestore request.
-        const replacementConfirmations = activeGroups.map(async group => {
+        const replacementChecks = activeGroups.map(async group => {
           const snapshot = await getDocsFromServer(query(
             collection(db, `groups/${group.id}/replacementSuggestions`),
             where('status', 'in', ['pending', 'denied', 'confirmed'])
           ));
-          return snapshot.docs
-            .filter(replacementDoc => {
-              const data = replacementDoc.data();
-              if (data?.status === 'pending') return data.suggestedCoach === user?.id;
-              if (data?.status === 'confirmed') return data.suggestedCoach === user?.id;
-              const groupCoaches = Array.isArray(group.coach) ? group.coach : [group.coach];
-              return data?.status === 'denied' && groupCoaches.includes(user?.id);
-            })
-            .map(replacementDoc => ({
+          return snapshot.docs.map(replacementDoc => ({
               group,
               date: replacementDoc.id,
-              status: replacementDoc.data()?.status,
+              ...replacementDoc.data(),
             }));
         });
 
-        const [legacyResultsByGroup, replacementResultsByGroup] = await Promise.all([
+        const [legacyResultsByGroup, allReplacementResultsByGroup] = await Promise.all([
           Promise.all(legacyChecks),
-          Promise.all(replacementConfirmations),
+          Promise.all(replacementChecks),
         ]);
+        const replacementResultsByGroup = allReplacementResultsByGroup.map(rows => rows.filter(row => {
+          if (allWarningsEnabled) return true;
+          if (row.status === 'pending' || row.status === 'confirmed') {
+            return row.suggestedCoach === user?.id;
+          }
+          const groupCoaches = Array.isArray(row.group.coach) ? row.group.coach : [row.group.coach];
+          return row.status === 'denied' && groupCoaches.includes(user?.id);
+        }));
         const confirmedReplacementDatesByGroup = new Map();
-        replacementResultsByGroup.flat().forEach(({ group, date, status }) => {
+        const responsibleConfirmedDatesByGroup = new Map();
+        allReplacementResultsByGroup.flat().forEach(({ group, date, status, suggestedCoach }) => {
           if (status !== 'confirmed') return;
           const dates = confirmedReplacementDatesByGroup.get(group.id) || new Set();
           dates.add(date);
           confirmedReplacementDatesByGroup.set(group.id, dates);
+          if (allWarningsEnabled || suggestedCoach === user?.id) {
+            const responsibleDates = responsibleConfirmedDatesByGroup.get(group.id) || new Set();
+            responsibleDates.add(date);
+            responsibleConfirmedDatesByGroup.set(group.id, responsibleDates);
+          }
         });
 
         // Keep these as simple single-field/default-index queries. The previous
@@ -265,13 +275,15 @@ function CoachTasksPage() {
           const oldestExpectedDate = parseDate(expectedDates[expectedDates.length - 1]);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const confirmedDates = [...(confirmedReplacementDatesByGroup.get(group.id) || [])]
+          const confirmedDates = [...(responsibleConfirmedDatesByGroup.get(group.id) || [])]
             .filter(confirmedDate => {
               const parsed = parseDate(confirmedDate);
               return !Number.isNaN(parsed.getTime()) && parsed >= oldestExpectedDate && parsed <= today;
             });
           const responsibilityDates = new Set([
-            ...(isRegularCoach(group, user) ? expectedDates : []),
+            ...(isRegularCoach(group, user, allWarningsEnabled)
+              ? expectedDates.filter(date => !confirmedReplacementDatesByGroup.get(group.id)?.has(date))
+              : []),
             ...confirmedDates,
           ]);
           if (responsibilityDates.size === 0) return [];
@@ -313,7 +325,7 @@ function CoachTasksPage() {
         today.setHours(0, 0, 0, 0);
 
         results.forEach(({ group, date, classItem }) => {
-          const regularCoach = isRegularCoach(group, user);
+          const regularCoach = isRegularCoach(group, user, allWarningsEnabled);
 
           if (!classItem) {
             const isConfirmedReplacement = confirmedReplacementDatesByGroup
@@ -394,7 +406,7 @@ function CoachTasksPage() {
       }
       if (latestRequestKey.current === cacheKey) setLoading(false);
     }
-  }, [activeGroups, coachTasksCache, db, user, warningScopeKey]);
+  }, [activeGroups, allWarningsEnabled, coachTasksCache, db, user, warningScopeKey]);
 
   useEffect(() => {
     loadWarnings();
@@ -409,7 +421,7 @@ function CoachTasksPage() {
     displayedWarningKey !== warningScopeKey && !displayedError
   );
 
-  if (!scopeLoading && !displayedError && displayedWarnings.length === 0) {
+  if (!canViewAllWarnings && !scopeLoading && !displayedError && displayedWarnings.length === 0) {
     return null;
   }
 
@@ -425,6 +437,19 @@ function CoachTasksPage() {
         refreshLabel={displayedError ? 'Try again' : 'Refresh warnings'}
         loadingLabel={displayedError ? 'Trying…' : 'Refreshing…'}
       />
+      {canViewAllWarnings && (
+        <label className="warnings-scope-toggle">
+          <input
+            type="checkbox"
+            checked={includeAllWarnings}
+            onChange={event => {
+              setIncludeAllWarnings(event.target.checked);
+              setExpanded(false);
+            }}
+          />
+          <span>Show all warnings</span>
+        </label>
+      )}
 
       {displayedWarnings.length > 0 && (
         <button

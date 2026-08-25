@@ -5,10 +5,10 @@ const UserContext = createContext();
 
 export function UserProvider({ children }) {
   const [user, setUserState] = useState(undefined); // undefined = loading
-  const [viewAsCoach, setViewAsCoach] = useState(true);
+  const [viewAsCoach, setViewAsCoach] = useState(false);
 
   const setUser = (userData) => {
-    setViewAsCoach(userData?.role === 'admin');
+    setViewAsCoach(false);
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData));
     } else {
