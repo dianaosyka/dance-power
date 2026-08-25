@@ -29,7 +29,7 @@ function getSalarySummaryStorageKey(user, monthValue) {
   if (!user?.role || !monthValue) return null;
 
   const userKey = user.id || user.role;
-  return `salarySummary:v4:${user.role}:${userKey}:${monthValue}`;
+  return `salarySummary:v5:${user.role}:${userKey}:${monthValue}`;
 }
 
 function getSavedSalarySummary(storageKey) {
@@ -280,6 +280,7 @@ function SalaryPage() {
       let grossTotal = otherPaymentsTotal;
       let rentTotal = 580;
       let coachesTotal = 0;
+      let classesEarnedTotal = 0;
 
       for (const group of groups) {
         const pastClassDocs = await loadPastClassDocs(group.id);
@@ -323,6 +324,7 @@ function SalaryPage() {
           grossTotal += classGross;
           rentTotal += rent;
           coachesTotal += classCoachesTotal;
+          classesEarnedTotal += classEarned;
 
           coachIds.forEach(coachId => {
             const existing = coachTotals.get(coachId) || {
@@ -384,6 +386,8 @@ function SalaryPage() {
       const nextSummary = {
         generatedAt: Date.now(),
         grossTotal,
+        classesEarnedTotal,
+        otherEarnedTotal: otherPaymentsTotal,
         otherPaymentsTotal,
         otherPaymentRows,
         rentTotal,
@@ -569,12 +573,16 @@ function SalaryPage() {
                 <strong>{summary.earnedTotal.toFixed(2)}€</strong>
               </div>
               <div>
-                <span>Gross</span>
-                <strong>{summary.grossTotal.toFixed(2)}€</strong>
+                <span>Earned from classes</span>
+                <strong>{Number(summary.classesEarnedTotal || 0).toFixed(2)}€</strong>
               </div>
               <div>
-                <span>Other payments</span>
-                <strong>{Number(summary.otherPaymentsTotal || 0).toFixed(2)}€</strong>
+                <span>Earned from other</span>
+                <strong>{Number(summary.otherEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>Gross</span>
+                <strong>{summary.grossTotal.toFixed(2)}€</strong>
               </div>
               <div>
                 <span>For coaches</span>
