@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { getReadCacheEpoch } from '../utils/readCacheEpoch';
+import { generateProjectSchedule } from '../utils/projectUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './SchedulePage.css';
 
@@ -86,7 +87,15 @@ function formatLoadedTime(timestamp) {
 
 function SchedulePage() {
   const navigate = useNavigate();
-  const { db, groups, coaches, scheduleCache, replacementCache } = useData();
+  const {
+    db,
+    groups,
+    projects,
+    projectsError,
+    coaches,
+    scheduleCache,
+    replacementCache,
+  } = useData();
   const [view, setView] = useState('week');
   const [anchor, setAnchor] = useState(() => new Date());
   const [pastClasses, setPastClasses] = useState([]);
@@ -100,6 +109,10 @@ function SchedulePage() {
   const visibleGroups = useMemo(
     () => groups.filter(group => group.hidden !== true),
     [groups]
+  );
+  const visibleProjects = useMemo(
+    () => projects.filter(project => project.hidden !== true),
+    [projects]
   );
 
   const visibleDates = useMemo(() => {
@@ -264,6 +277,24 @@ function SchedulePage() {
     [coaches]
   );
 
+  const visibleProjectSessions = useMemo(() => {
+    const visibleKeys = new Set(visibleDateKeys);
+    return visibleProjects.flatMap(project => generateProjectSchedule(project)
+      .filter(session => visibleKeys.has(session.date))
+      .map(session => ({
+        ...session,
+        group: {
+          id: project.id,
+          name: project.name,
+          coach: project.coach,
+          time: session.time,
+        },
+        project,
+        coach: project.coach ? [project.coach] : [],
+        isProject: true,
+      })));
+  }, [visibleDateKeys, visibleProjects]);
+
   const cells = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -279,6 +310,13 @@ function SchedulePage() {
     const dateCells = visibleDates.map(date => {
       const key = dateKey(date);
       const recorded = visiblePastClasses.filter(item => item.date === key);
+      const projectSessions = visibleProjectSessions
+        .filter(item => item.date === key)
+        .map(item => ({
+          ...item,
+          isFuture: date >= today,
+          isMissing: false,
+        }));
       const recurring = date >= CLASS_TRACKING_START
         ? visibleGroups
           .filter(group => (group.dayOfWeek ?? 5) === date.getDay())
@@ -290,7 +328,7 @@ function SchedulePage() {
             isMissing: date < today,
           }))
         : [];
-      const classes = [...recorded, ...recurring]
+      const classes = [...recorded, ...recurring, ...projectSessions]
         .map(item => ({
           ...item,
           replacement: replacementByDateAndGroup.get(`${key}-${item.group.id}`) || null,
@@ -308,7 +346,7 @@ function SchedulePage() {
     const firstOffset = (visibleDates[0].getDay() + 6) % 7;
     const trailing = (7 - ((firstOffset + dateCells.length) % 7)) % 7;
     return [...Array(firstOffset).fill(null), ...dateCells, ...Array(trailing).fill(null)];
-  }, [pastClasses, rangeIsLoaded, replacements, view, visibleDates, visibleGroups]);
+  }, [pastClasses, rangeIsLoaded, replacements, view, visibleDates, visibleGroups, visibleProjectSessions]);
 
   const changePeriod = amount => {
     setAnchor(current => view === 'week'
@@ -328,7 +366,7 @@ function SchedulePage() {
           message={rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Zatiaľ neaktualizované'}
           error={error
             ? `${error}${rangeIsLoaded ? ` ${formatLoadedTime(lastLoadedAt)}.` : ''}`
-            : ''}
+            : projectsError ? `Projects: ${projectsError}` : ''}
           loading={loading}
           onRefresh={() => loadClasses({ force: true })}
           refreshLabel="Obnoviť rozvrh"
@@ -393,14 +431,22 @@ function SchedulePage() {
                         return (
                           <button
                             type="button"
-                            key={`${item.group.id}-${itemIndex}`}
-                            className={`schedule-event ${item.canceled ? 'is-canceled' : ''} ${item.isMissing ? 'is-missing' : item.isFuture ? 'is-future' : 'is-recorded'} ${item.replacement ? `has-replacement--${item.replacement.status}` : ''}`}
-                            onClick={() => navigate(`/group/${item.group.id}/class/${cell.key}`)}
+                            key={`${item.isProject ? 'project' : 'group'}-${item.group.id}-${item.time || ''}-${itemIndex}`}
+                            className={`schedule-event ${item.isProject ? 'is-project' : ''} ${item.canceled ? 'is-canceled' : ''} ${item.isMissing ? 'is-missing' : item.isFuture ? 'is-future' : 'is-recorded'} ${item.replacement ? `has-replacement--${item.replacement.status}` : ''}`}
+                            onClick={() => navigate(item.isProject
+                              ? `/project/${item.project.id}`
+                              : `/group/${item.group.id}/class/${cell.key}`)}
                             title={`${item.group.name} · ${classTime(item)} · ${names}`}
                           >
                             <strong>{classTime(item)}</strong>
                             <span>{item.group.name}</span>
-                            <small>{item.canceled ? 'Zrušené' : item.isMissing ? `⚠ Hodina nebola pridaná · ${names}` : names}</small>
+                            <small>{item.isProject
+                              ? `Projekt · ${names}`
+                              : item.canceled
+                                ? 'Zrušené'
+                                : item.isMissing
+                                  ? `⚠ Hodina nebola pridaná · ${names}`
+                                  : names}</small>
                             {replacementLabel && <em>{replacementLabel}</em>}
                           </button>
                         );
@@ -415,6 +461,7 @@ function SchedulePage() {
 
         <div className="schedule-legend">
           <span><i className="legend-recorded" /> Uskutočnená hodina</span>
+          <span><i className="legend-project" /> Projektová hodina</span>
           <span><i className="legend-future" /> Nadchádzajúca hodina</span>
           <span><i className="legend-missing" /> Hodina nebola pridaná</span>
           <span><i className="legend-pending" /> Zastupovanie čaká</span>

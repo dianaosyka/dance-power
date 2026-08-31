@@ -6,6 +6,7 @@ import { useUser } from '../context/UserContext';
 import PaymentHistoryPage from './PaymentHistoryPage';
 
 const mockGetOtherPaymentHistoryCache = jest.fn();
+const mockGetProjectPaymentHistoryCache = jest.fn();
 
 jest.mock('../context/firebase', () => ({
   STAFF_DATA_CACHE_TTL_MS: 60_000,
@@ -26,12 +27,25 @@ jest.mock('../utils/otherPaymentsCache', () => ({
   loadOtherPaymentHistory: () => Promise.resolve({ payments: [], loadedAt: 1 }),
 }));
 
+jest.mock('../utils/projectPaymentsCache', () => ({
+  getProjectPaymentHistoryCache: (...args) => mockGetProjectPaymentHistoryCache(...args),
+  hasFreshProjectPaymentHistory: () => true,
+  loadProjectPaymentHistory: () => Promise.resolve({ payments: [], loadedAt: 1 }),
+}));
+
+jest.mock('../utils/workshopPaymentsCache', () => ({
+  getWorkshopPaymentHistoryCache: () => ({ payments: [], loadedAt: 1 }),
+  hasFreshWorkshopPaymentHistory: () => true,
+  loadWorkshopPaymentHistory: () => Promise.resolve({ payments: [], loadedAt: 1 }),
+}));
+
 jest.mock('../components/RefreshStatus', () => () => null);
 
 describe('PaymentHistoryPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetOtherPaymentHistoryCache.mockReturnValue({ payments: [], loadedAt: 1 });
+    mockGetProjectPaymentHistoryCache.mockReturnValue({ payments: [], loadedAt: 1 });
   });
 
   it('renders the compact payment summary and reveals details from its arrow', () => {
@@ -147,5 +161,51 @@ describe('PaymentHistoryPage', () => {
     expect(screen.getByText('paid by').nextElementSibling).toHaveTextContent('cash');
     expect(screen.queryByText('classes')).not.toBeInTheDocument();
     expect(screen.queryByText('discount')).not.toBeInTheDocument();
+  });
+
+  it('includes nested project payments in global history', () => {
+    mockGetProjectPaymentHistoryCache.mockReturnValue({
+      loadedAt: 1,
+      payments: [{
+        id: 'student-1--first_half',
+        projectId: 'project-1',
+        studentId: 'student-1',
+        amount: 60,
+        createdAt: '30.08.2026',
+        dateFrom: '01.09.2026',
+        paymentMethod: 'cash',
+        paymentPart: 'first_half',
+        timestamp: { seconds: 1_788_048_000 },
+      }],
+    });
+    const navigate = jest.fn();
+    useNavigate.mockReturnValue(navigate);
+    useUser.mockReturnValue({ user: { id: 'admin-1', role: 'admin' } });
+    useData.mockReturnValue({
+      payments: [],
+      students: [{ id: 'student-1', name: 'Alice Example' }],
+      groups: [],
+      projects: [{ id: 'project-1', name: 'Summer Project' }],
+      db: { id: 'database' },
+      studentsLoaded: true,
+      paymentsLoaded: true,
+      studentsLoading: false,
+      paymentsLoading: false,
+      studentsError: null,
+      paymentsError: null,
+      studentsLastLoadedAt: 1,
+      paymentsLastLoadedAt: 1,
+      refreshStudents: jest.fn(),
+      refreshPayments: jest.fn(),
+    });
+
+    render(<PaymentHistoryPage />);
+
+    expect(screen.getByText('payment for project')).toBeInTheDocument();
+    expect(screen.getByText(/summer project first payment \(50%\)/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open payment for/i }));
+    expect(navigate).toHaveBeenCalledWith(
+      '/project/project-1?paymentId=student-1--first_half'
+    );
   });
 });

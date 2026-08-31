@@ -10,8 +10,19 @@ import {
   hasFreshOtherPaymentHistory,
   loadOtherPaymentHistory,
 } from '../utils/otherPaymentsCache';
+import {
+  getProjectPaymentHistoryCache,
+  hasFreshProjectPaymentHistory,
+  loadProjectPaymentHistory,
+} from '../utils/projectPaymentsCache';
 import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
 import { getPaymentDetailPath } from '../utils/paymentNavigationUtils';
+import { PROJECT_PAYMENT_PART_LABELS } from '../utils/projectPaymentUtils';
+import {
+  getWorkshopPaymentHistoryCache,
+  hasFreshWorkshopPaymentHistory,
+  loadWorkshopPaymentHistory,
+} from '../utils/workshopPaymentsCache';
 import RefreshStatus from '../components/RefreshStatus';
 import './PaymentHistoryPage.css';
 
@@ -25,6 +36,7 @@ const PAYMENT_CATEGORY_LABELS = {
   private_lessons: 'private lesson',
   workshops: 'workshop',
 };
+const EMPTY_PROJECTS = [];
 
 function formatStudentName(value) {
   const normalizedName = String(value || 'unknown').trim().toLocaleLowerCase();
@@ -75,6 +87,8 @@ function formatEuroAmount(value) {
 }
 
 function getPaymentCategoryLabel(payment) {
+  if (payment.paymentKind === 'workshop') return 'payment for workshop';
+  if (payment.paymentKind === 'project') return 'payment for project';
   if (payment.paymentKind !== 'other') return 'payment for groups';
   return PAYMENT_CATEGORY_LABELS[payment.reason]
     || getOtherPaymentReasonLabel(payment.reason).toLocaleLowerCase();
@@ -86,6 +100,8 @@ function PaymentHistoryPage() {
     payments,
     students,
     groups,
+    projects = EMPTY_PROJECTS,
+    workshops = EMPTY_PROJECTS,
     db,
     studentsLoaded,
     paymentsLoaded,
@@ -114,6 +130,22 @@ function PaymentHistoryPage() {
   const [otherPaymentsLastLoadedAt, setOtherPaymentsLastLoadedAt] = useState(
     () => getOtherPaymentHistoryCache(historyScope).loadedAt
   );
+  const [projectPayments, setProjectPayments] = useState(
+    () => getProjectPaymentHistoryCache(historyScope).payments
+  );
+  const [projectPaymentsLoaded, setProjectPaymentsLoaded] = useState(
+    () => getProjectPaymentHistoryCache(historyScope).loadedAt !== null
+  );
+  const [projectPaymentsLoading, setProjectPaymentsLoading] = useState(false);
+  const [projectPaymentsError, setProjectPaymentsError] = useState('');
+  const [projectPaymentsLastLoadedAt, setProjectPaymentsLastLoadedAt] = useState(
+    () => getProjectPaymentHistoryCache(historyScope).loadedAt
+  );
+  const [workshopPayments, setWorkshopPayments] = useState(() => getWorkshopPaymentHistoryCache().payments);
+  const [workshopPaymentsLoaded, setWorkshopPaymentsLoaded] = useState(() => getWorkshopPaymentHistoryCache().loadedAt !== null);
+  const [workshopPaymentsLoading, setWorkshopPaymentsLoading] = useState(false);
+  const [workshopPaymentsError, setWorkshopPaymentsError] = useState('');
+  const [workshopPaymentsLastLoadedAt, setWorkshopPaymentsLastLoadedAt] = useState(() => getWorkshopPaymentHistoryCache().loadedAt);
 
   const loadOtherPayments = useCallback(async ({ force = false } = {}) => {
     if (!force && hasFreshOtherPaymentHistory(historyScope, STAFF_DATA_CACHE_TTL_MS)) {
@@ -144,6 +176,55 @@ function PaymentHistoryPage() {
     loadOtherPayments().catch(() => {});
   }, [loadOtherPayments]);
 
+  const loadProjectPayments = useCallback(async ({ force = false } = {}) => {
+    if (!force && hasFreshProjectPaymentHistory(
+      historyScope,
+      projects,
+      STAFF_DATA_CACHE_TTL_MS
+    )) {
+      const cachedHistory = getProjectPaymentHistoryCache(historyScope);
+      setProjectPayments(cachedHistory.payments);
+      setProjectPaymentsLoaded(true);
+      setProjectPaymentsLastLoadedAt(cachedHistory.loadedAt);
+      return cachedHistory.payments;
+    }
+
+    setProjectPaymentsLoading(true);
+    setProjectPaymentsError('');
+    try {
+      const result = await loadProjectPaymentHistory(db, projects, historyScope);
+      setProjectPayments(result.payments);
+      setProjectPaymentsLoaded(true);
+      setProjectPaymentsLastLoadedAt(result.loadedAt);
+      return result.payments;
+    } catch (error) {
+      setProjectPaymentsError(error?.message || String(error));
+      throw error;
+    } finally {
+      setProjectPaymentsLoading(false);
+    }
+  }, [db, historyScope, projects]);
+
+  useEffect(() => {
+    loadProjectPayments().catch(() => {});
+  }, [loadProjectPayments]);
+
+  const loadWorkshopPayments = useCallback(async ({ force = false } = {}) => {
+    if (!force && hasFreshWorkshopPaymentHistory(workshops, STAFF_DATA_CACHE_TTL_MS)) {
+      const cached = getWorkshopPaymentHistoryCache();
+      setWorkshopPayments(cached.payments); setWorkshopPaymentsLoaded(true); setWorkshopPaymentsLastLoadedAt(cached.loadedAt);
+      return cached.payments;
+    }
+    setWorkshopPaymentsLoading(true); setWorkshopPaymentsError('');
+    try {
+      const result = await loadWorkshopPaymentHistory(db, workshops);
+      setWorkshopPayments(result.payments); setWorkshopPaymentsLoaded(true); setWorkshopPaymentsLastLoadedAt(result.loadedAt);
+      return result.payments;
+    } catch (error) { setWorkshopPaymentsError(error?.message || String(error)); throw error; }
+    finally { setWorkshopPaymentsLoading(false); }
+  }, [db, workshops]);
+  useEffect(() => { loadWorkshopPayments().catch(() => {}); }, [loadWorkshopPayments]);
+
   const studentNamesById = useMemo(
     () => new Map(students.map(student => [
       student.id,
@@ -162,6 +243,11 @@ function PaymentHistoryPage() {
     () => new Map(groups.map(group => [group.id, group])),
     [groups]
   );
+  const projectsById = useMemo(
+    () => new Map(projects.map(project => [project.id, project])),
+    [projects]
+  );
+  const workshopsById = useMemo(() => new Map(workshops.map(item => [item.id, item])), [workshops]);
 
   const getStudentName = (id) => studentNamesById.get(id) || 'Unknown';
   const getStudentDisplayName = (id) => studentDisplayNamesById.get(id) || 'Unknown';
@@ -184,6 +270,18 @@ function PaymentHistoryPage() {
         getOtherPaymentReasonLabel(payment.reason).toLocaleLowerCase(),
         startDateAndTime,
       ].filter(Boolean).join(' ');
+    }
+
+    if (payment.paymentKind === 'project') {
+      const projectName = projectsById.get(payment.projectId)?.name || payment.projectName || payment.projectId;
+      const paymentPart = PROJECT_PAYMENT_PART_LABELS[payment.paymentPart]
+        || (payment.paymentPart ? payment.paymentPart : 'Full payment (100%)');
+      return [studentName, projectName, paymentPart, startDateAndTime]
+        .filter(Boolean).join(' ').toLocaleLowerCase();
+    }
+    if (payment.paymentKind === 'workshop') {
+      const workshopName = workshopsById.get(payment.workshopId)?.name || payment.workshopName || payment.workshopId;
+      return [studentName, workshopName, startDateAndTime].filter(Boolean).join(' ').toLocaleLowerCase();
     }
 
     const groupDescriptions = getPaymentGroups(payment.groups).map(group => [
@@ -224,13 +322,15 @@ function PaymentHistoryPage() {
     const allPayments = [
       ...payments.map(payment => ({ ...payment, paymentKind: 'group' })),
       ...otherPayments.map(payment => ({ ...payment, paymentKind: 'other' })),
+      ...projectPayments.map(payment => ({ ...payment, paymentKind: 'project' })),
+      ...workshopPayments.map(payment => ({ ...payment, paymentKind: 'workshop' })),
     ];
 
     return allPayments.sort((a, b) => {
       const difference = getSortValue(b) - getSortValue(a);
       return difference || getTimestampValue(b) - getTimestampValue(a);
     });
-  }, [otherPayments, payments, sortBy]);
+  }, [otherPayments, payments, projectPayments, sortBy, workshopPayments]);
 
   const formatTimestamp = (ts) => {
     if (!ts) return '—';
@@ -259,9 +359,15 @@ function PaymentHistoryPage() {
   const otherPaymentsLastLoadedText = otherPaymentsLastLoadedAt
     ? new Date(otherPaymentsLastLoadedAt).toLocaleString()
     : 'not updated yet';
+  const projectPaymentsLastLoadedText = projectPaymentsLastLoadedAt
+    ? new Date(projectPaymentsLastLoadedAt).toLocaleString()
+    : 'not updated yet';
+  const workshopPaymentsLastLoadedText = workshopPaymentsLastLoadedAt ? new Date(workshopPaymentsLastLoadedAt).toLocaleString() : 'not updated yet';
   const otherPaymentsReady = otherPaymentsLoaded || Boolean(otherPaymentsError);
-  const dataLoaded = studentsLoaded && paymentsLoaded && otherPaymentsReady;
-  const dataLoading = studentsLoading || paymentsLoading || otherPaymentsLoading;
+  const projectPaymentsReady = projectPaymentsLoaded || Boolean(projectPaymentsError);
+  const workshopPaymentsReady = workshopPaymentsLoaded || Boolean(workshopPaymentsError);
+  const dataLoaded = studentsLoaded && paymentsLoaded && otherPaymentsReady && projectPaymentsReady && workshopPaymentsReady;
+  const dataLoading = studentsLoading || paymentsLoading || otherPaymentsLoading || projectPaymentsLoading || workshopPaymentsLoading;
 
   const handleRefreshData = async () => {
     try {
@@ -269,6 +375,8 @@ function PaymentHistoryPage() {
         refreshStudents(),
         refreshPayments(),
         loadOtherPayments({ force: true }),
+        loadProjectPayments({ force: true }),
+        loadWorkshopPayments({ force: true }),
       ]);
     } catch (err) {
       // The shared data context exposes the error in the status message below.
@@ -295,12 +403,14 @@ function PaymentHistoryPage() {
       </div>
       <RefreshStatus
         message={dataLoaded
-          ? `Last updated — Students: ${studentsLastLoadedText}; Group payments: ${paymentsLastLoadedText}; Other payments: ${otherPaymentsLastLoadedText}`
+          ? `Last updated — Students: ${studentsLastLoadedText}; Group payments: ${paymentsLastLoadedText}; Project payments: ${projectPaymentsLastLoadedText}; Workshop payments: ${workshopPaymentsLastLoadedText}; Other payments: ${otherPaymentsLastLoadedText}`
           : 'Not updated yet'}
         error={(studentsError || paymentsError || otherPaymentsError)
           ? [
               studentsError ? `Students: ${studentsError}` : '',
               paymentsError ? `Group payments: ${paymentsError}` : '',
+              projectPaymentsError ? `Project payments: ${projectPaymentsError}` : '',
+              workshopPaymentsError ? `Workshop payments: ${workshopPaymentsError}` : '',
               otherPaymentsError ? `Other payments: ${otherPaymentsError}` : '',
             ].filter(Boolean).join(' · ')
           : ''}
@@ -400,6 +510,19 @@ function PaymentHistoryPage() {
                         <dt>reason</dt>
                         <dd>{getOtherPaymentReasonLabel(p.reason).toLocaleLowerCase()}</dd>
                       </div>
+                    ) : p.paymentKind === 'project' ? (
+                      <>
+                        <div>
+                          <dt>project</dt>
+                          <dd>{projectsById.get(p.projectId)?.name || p.projectName || p.projectId || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt>project payment</dt>
+                          <dd>{PROJECT_PAYMENT_PART_LABELS[p.paymentPart] || 'Full payment (100%)'}</dd>
+                        </div>
+                      </>
+                    ) : p.paymentKind === 'workshop' ? (
+                      <><div><dt>workshop</dt><dd>{workshopsById.get(p.workshopId)?.name || p.workshopName || p.workshopId || '—'}</dd></div></>
                     ) : (
                       <>
                         <div>
@@ -420,7 +543,7 @@ function PaymentHistoryPage() {
                       <dt>date from</dt>
                       <dd>{p.dateFrom || '—'}{p.timeFrom ? ` ${p.timeFrom}` : ''}</dd>
                     </div>
-                    {p.paymentKind !== 'other' && (
+                    {p.paymentKind === 'group' && (
                       <div>
                         <dt>discount</dt>
                         <dd>{p.discount ?? 0}%</dd>

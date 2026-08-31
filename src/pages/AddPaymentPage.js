@@ -1,10 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useData } from '../context/firebase';
 import {
   collection,
   Timestamp,
   doc,
   arrayUnion,
+  getDocsFromServer,
+  runTransaction,
   writeBatch, // <-- atomic writes
 } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -16,7 +18,15 @@ import {
   OTHER_PAYMENT_REASONS,
 } from '../utils/otherPaymentsUtils';
 import { invalidateOtherPaymentHistory } from '../utils/otherPaymentsCache';
+import { invalidateProjectPaymentHistory } from '../utils/projectPaymentsCache';
+import { invalidateWorkshopPaymentHistory } from '../utils/workshopPaymentsCache';
 import { PAYMENT_METHODS } from '../utils/paymentMethodUtils';
+import {
+  getAvailableProjectPaymentParts,
+  getProjectPaymentAmount,
+  getProjectPaymentDocId,
+  PROJECT_PAYMENT_PART_LABELS,
+} from '../utils/projectPaymentUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './AddPaymentPage.css';
 
@@ -24,6 +34,8 @@ function AddPaymentPage() {
   const {
     students,
     groups,
+    projects = [],
+    workshops = [],
     db,
     studentsLoaded,
     studentsLoading,
@@ -50,14 +62,23 @@ function AddPaymentPage() {
   const [paidDate, setPaidDate] = useState('');
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [reason, setReason] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState('');
+  const [workshopPayments, setWorkshopPayments] = useState([]);
+  const [projectMembers, setProjectMembers] = useState([]);
+  const [projectPayments, setProjectPayments] = useState([]);
+  const [projectPaymentPart, setProjectPaymentPart] = useState('');
+  const [projectDataLoading, setProjectDataLoading] = useState(false);
+  const [projectDataError, setProjectDataError] = useState('');
+  const [projectDataLoadedAt, setProjectDataLoadedAt] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false); // <-- prevent double-clicks
   const [errors, setErrors] = useState({});
   const appliedPrefillQuery = useRef(null);
   const submissionInProgress = useRef(false);
+  const projectLoadGeneration = useRef(0);
 
   useEffect(() => {
     if (!isCoach) return;
-    setPaymentMode('group');
     setPaymentMethod('cash');
   }, [isCoach]);
 
@@ -70,12 +91,111 @@ function AddPaymentPage() {
     });
   };
 
-  const filteredStudents = students.filter(s =>
+  const selectedProject = projects.find(project => project.id === selectedProjectId) || null;
+  const selectedWorkshop = workshops.find(workshop => workshop.id === selectedWorkshopId) || null;
+  const projectMemberIds = useMemo(
+    () => new Set(projectMembers.map(member => member.studentId || member.id)),
+    [projectMembers]
+  );
+  const paidWorkshopStudentIds = useMemo(
+    () => new Set(workshopPayments.filter(payment => payment.status === 'active').map(payment => payment.studentId)),
+    [workshopPayments]
+  );
+  const paymentStudentSource = paymentMode === 'project'
+    ? students.filter(student => projectMemberIds.has(student.id))
+    : paymentMode === 'workshop'
+      ? students.filter(student => !paidWorkshopStudentIds.has(student.id))
+    : students;
+  const filteredStudents = paymentStudentSource.filter(s =>
     String(s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
   const sortedGroups = groups
     .filter(group => group.hidden !== true)
     .sort((b, a) => a.name.localeCompare(b.name));
+  const sortedProjects = projects
+    .filter(project => project.hidden !== true)
+    .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
+  const sortedWorkshops = workshops
+    .filter(workshop => workshop.hidden !== true)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  useEffect(() => {
+    if (paymentMode !== 'workshop' || !selectedWorkshopId) {
+      setWorkshopPayments([]);
+      return;
+    }
+    setProjectDataLoading(true);
+    setProjectDataError('');
+    getDocsFromServer(collection(db, `workshops/${selectedWorkshopId}/payments`)).then(paymentsSnapshot => {
+      setWorkshopPayments(paymentsSnapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+      setProjectDataLoadedAt(Date.now());
+    }).catch(error => setProjectDataError(error?.message || String(error)))
+      .finally(() => setProjectDataLoading(false));
+  }, [db, paymentMode, selectedWorkshopId]);
+
+  useEffect(() => {
+    if (paymentMode !== 'workshop' || !selectedWorkshop) return;
+    setAmount(String(selectedWorkshop.price || ''));
+  }, [paymentMode, selectedWorkshop]);
+
+  const availableProjectPaymentParts = useMemo(
+    () => selectedStudent
+      ? getAvailableProjectPaymentParts(projectPayments, selectedStudent.id)
+      : [],
+    [projectPayments, selectedStudent]
+  );
+
+  const loadProjectPaymentData = useCallback(async (projectId) => {
+    if (!projectId) return;
+    const generation = projectLoadGeneration.current + 1;
+    projectLoadGeneration.current = generation;
+    setProjectDataLoading(true);
+    setProjectDataError('');
+    try {
+      const [membersSnapshot, paymentsSnapshot] = await Promise.all([
+        getDocsFromServer(collection(db, `projects/${projectId}/signedStudents`)),
+        getDocsFromServer(collection(db, `projects/${projectId}/payments`)),
+      ]);
+      if (projectLoadGeneration.current !== generation) return;
+      setProjectMembers(membersSnapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+      setProjectPayments(paymentsSnapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+      setProjectDataLoadedAt(Date.now());
+    } catch (error) {
+      if (projectLoadGeneration.current !== generation) return;
+      setProjectMembers([]);
+      setProjectPayments([]);
+      setProjectDataError(error?.message || String(error));
+    } finally {
+      if (projectLoadGeneration.current === generation) setProjectDataLoading(false);
+    }
+  }, [db]);
+
+  useEffect(() => {
+    setSearchTerm('');
+    setSelectedStudent(null);
+    setProjectPaymentPart('');
+    if (paymentMode !== 'workshop') setAmount('');
+    setErrors({});
+    if (paymentMode !== 'project' || !selectedProjectId) {
+      projectLoadGeneration.current += 1;
+      setProjectMembers([]);
+      setProjectPayments([]);
+      setProjectDataError('');
+      setProjectDataLoadedAt(null);
+      return;
+    }
+    loadProjectPaymentData(selectedProjectId);
+  }, [loadProjectPaymentData, paymentMode, selectedProjectId]);
+
+  useEffect(() => {
+    if (paymentMode !== 'project' || !selectedProject) return;
+    const nextPart = availableProjectPaymentParts.includes(projectPaymentPart)
+      ? projectPaymentPart
+      : availableProjectPaymentParts[0] || '';
+    if (nextPart !== projectPaymentPart) setProjectPaymentPart(nextPart);
+    const nextAmount = getProjectPaymentAmount(selectedProject.price, nextPart);
+    setAmount(nextAmount === null ? '' : String(nextAmount));
+  }, [availableProjectPaymentParts, paymentMode, projectPaymentPart, selectedProject]);
 
   const toggleGroup = (id) => {
     clearError('groups');
@@ -91,13 +211,22 @@ function AddPaymentPage() {
     const params = new URLSearchParams(location.search);
     const studentIdFromURL = params.get('studentId');
     const nameFromURL = params.get('studentName');
+    const projectIdFromURL = params.get('projectId');
+    const workshopIdFromURL = params.get('workshopId');
     const paymentModeFromURL = params.get('mode');
     appliedPrefillQuery.current = location.search;
 
     if (!isCoach && paymentModeFromURL === 'other') {
       setPaymentMode('other');
+    } else if (paymentModeFromURL === 'project') {
+      setPaymentMode('project');
+      if (projectIdFromURL) setSelectedProjectId(projectIdFromURL);
+    } else if (paymentModeFromURL === 'workshop') {
+      setPaymentMode('workshop');
+      if (workshopIdFromURL) setSelectedWorkshopId(workshopIdFromURL);
     }
 
+    if (paymentModeFromURL === 'project' || paymentModeFromURL === 'workshop') return;
     if (!studentIdFromURL && !nameFromURL) return;
 
     const match = studentIdFromURL
@@ -111,6 +240,36 @@ function AddPaymentPage() {
       setSearchTerm(nameFromURL);
     }
   }, [isCoach, students, studentsLoaded, location.search]);
+
+  useEffect(() => {
+    if (paymentMode !== 'workshop' || projectDataLoading || selectedStudent) return;
+    const studentId = new URLSearchParams(location.search).get('studentId');
+    const match = students.find(student => student.id === studentId);
+    if (match && !paidWorkshopStudentIds.has(match.id)) {
+      setSelectedStudent(match);
+      setSearchTerm(match.name || match.id);
+    }
+  }, [location.search, paidWorkshopStudentIds, paymentMode, projectDataLoading, selectedStudent, selectedWorkshopId, students]);
+
+  useEffect(() => {
+    if (paymentMode !== 'project' || projectDataLoading || projectMembers.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const studentIdFromURL = params.get('studentId');
+    if (!studentIdFromURL || selectedStudent) return;
+    if (!projectMemberIds.has(studentIdFromURL)) return;
+    const match = students.find(student => student.id === studentIdFromURL);
+    if (!match) return;
+    setSelectedStudent(match);
+    setSearchTerm(match.name || match.id);
+  }, [
+    location.search,
+    paymentMode,
+    projectDataLoading,
+    projectMemberIds,
+    projectMembers.length,
+    selectedStudent,
+    students,
+  ]);
 
   const handleRefreshStudents = async () => {
     try {
@@ -126,15 +285,27 @@ function AddPaymentPage() {
 
     const nextErrors = {};
     const isOtherPayment = !isCoach && paymentMode === 'other';
+    const isProjectPayment = paymentMode === 'project';
+    const isWorkshopPayment = paymentMode === 'workshop';
+    const isGroupPayment = paymentMode === 'group';
+    if (isProjectPayment && !selectedProject) nextErrors.project = 'Select a project.';
+    if (isWorkshopPayment && !selectedWorkshop) nextErrors.project = 'Select a workshop.';
+    if (isProjectPayment && projectDataLoading) nextErrors.project = 'Wait for project data to load.';
     if (!selectedStudent) nextErrors.student = 'Select a student from the list.';
     if (!amount) nextErrors.amount = 'Amount is required.';
-    if (!startDate) nextErrors.startDate = 'Start date is required.';
+    if (isGroupPayment || isOtherPayment) {
+      if (!startDate) nextErrors.startDate = 'Start date is required.';
+    }
     if (!paidDate) nextErrors.paidDate = 'Payment date is required.';
     if (isOtherPayment) {
       if (!reason) nextErrors.reason = 'Select a payment reason.';
-    } else {
+    } else if (isGroupPayment) {
       if (!type) nextErrors.type = 'Select the number of classes.';
       if (selectedGroups.length === 0) nextErrors.groups = 'Select at least one group.';
+    } else if (isProjectPayment && !projectPaymentPart) {
+      nextErrors.projectPaymentPart = availableProjectPaymentParts.length === 0
+        ? 'This student has already paid the full project price.'
+        : 'Select full payment or a 50% installment.';
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -143,18 +314,18 @@ function AddPaymentPage() {
     }
 
     const amountNum = parseFloat(String(amount).replace(',', '.'));
-    const typeNum = isOtherPayment ? null : parseInt(String(type), 10);
-    const discountNum = isOtherPayment
-      ? 0
-      : parseFloat(String(discount || '0').replace(',', '.'));
+    const typeNum = isGroupPayment ? parseInt(String(type), 10) : null;
+    const discountNum = isGroupPayment
+      ? parseFloat(String(discount || '0').replace(',', '.'))
+      : 0;
 
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
       nextErrors.amount = 'Enter a valid amount greater than zero.';
     }
-    if (!isOtherPayment && (Number.isNaN(typeNum) || typeNum <= 0)) {
+    if (isGroupPayment && (Number.isNaN(typeNum) || typeNum <= 0)) {
       nextErrors.type = 'Select a valid type.';
     }
-    if (!isOtherPayment && Number.isNaN(discountNum)) {
+    if (isGroupPayment && Number.isNaN(discountNum)) {
       nextErrors.discount = 'Enter a valid discount.';
     }
 
@@ -166,8 +337,110 @@ function AddPaymentPage() {
     submissionInProgress.current = true;
     setIsSubmitting(true);
     try {
-      const batch = writeBatch(db);
       const timestamp = Timestamp.now();
+      if (isWorkshopPayment) {
+        const studentId = selectedStudent.id;
+        const workshopRef = doc(db, 'workshops', selectedWorkshop.id);
+        const memberRef = doc(db, `workshops/${selectedWorkshop.id}/signedStudents`, studentId);
+        const paymentRef = doc(db, `workshops/${selectedWorkshop.id}/payments`, studentId);
+        const paymentData = {
+          studentId, studentName: selectedStudent.name || studentId, amount: amountNum,
+          dateFrom: formatEuropeanDate(selectedWorkshop.date), createdAt: formatEuropeanDate(paidDate),
+          timestamp, status: 'active', paymentKind: 'workshop', workshopId: selectedWorkshop.id,
+          workshopName: selectedWorkshop.name, paymentMethod: isCoach ? 'cash' : paymentMethod,
+          recordedBy: user?.id || '', recordedByRole: user?.role || '',
+        };
+        await runTransaction(db, async transaction => {
+          const [workshopSnapshot, memberSnapshot, paymentSnapshot] = await Promise.all([
+            transaction.get(workshopRef), transaction.get(memberRef), transaction.get(paymentRef),
+          ]);
+          if (!workshopSnapshot.exists()) throw new Error('This workshop no longer exists.');
+          if (paymentSnapshot.exists()) throw new Error('This workshop payment already exists.');
+          if (!memberSnapshot.exists()) {
+            transaction.set(memberRef, {
+              studentId, studentName: selectedStudent.name || studentId,
+              signedAt: timestamp, signedBy: user?.id || '',
+            });
+            transaction.update(workshopRef, {
+              signedStudentCount: Number(workshopSnapshot.data()?.signedStudentCount || 0) + 1,
+            });
+          }
+          transaction.set(paymentRef, paymentData);
+        });
+        invalidateSalarySummaries();
+        invalidateWorkshopPaymentHistory();
+        navigate(`/workshop/${selectedWorkshop.id}`);
+        return;
+      }
+      if (isProjectPayment) {
+        const studentId = selectedStudent.id;
+        const paymentData = {
+          studentId,
+          studentName: selectedStudent.name || studentId,
+          amount: amountNum,
+          dateFrom: formatEuropeanDate(selectedProject.startDate),
+          createdAt: formatEuropeanDate(paidDate),
+          timestamp,
+          status: 'active',
+          paymentKind: 'project',
+          paymentPart: projectPaymentPart,
+          paymentPlan: projectPaymentPart === 'full' ? 'full' : 'split',
+          installmentNumber: projectPaymentPart === 'second_half' ? 2 : 1,
+          installmentCount: projectPaymentPart === 'full' ? 1 : 2,
+          paymentMethod: isCoach ? 'cash' : paymentMethod,
+          recordedBy: user?.id || '',
+          recordedByRole: user?.role || '',
+        };
+        const projectRef = doc(db, 'projects', selectedProject.id);
+        const memberRef = doc(db, `projects/${selectedProject.id}/signedStudents`, studentId);
+        const paymentRefs = ['full', 'first_half', 'second_half'].map(part => ({
+          part,
+          ref: doc(
+            db,
+            `projects/${selectedProject.id}/payments`,
+            getProjectPaymentDocId(studentId, part)
+          ),
+        }));
+        const legacyPaymentRef = doc(db, `projects/${selectedProject.id}/payments`, studentId);
+
+        await runTransaction(db, async transaction => {
+          const [projectSnapshot, memberSnapshot, legacySnapshot, ...paymentSnapshots] =
+            await Promise.all([
+              transaction.get(projectRef),
+              transaction.get(memberRef),
+              transaction.get(legacyPaymentRef),
+              ...paymentRefs.map(item => transaction.get(item.ref)),
+            ]);
+          if (!projectSnapshot.exists()) throw new Error('This project no longer exists.');
+          if (!memberSnapshot.exists()) throw new Error('This student is not signed for the project.');
+          const existingPayments = [
+            ...(legacySnapshot.exists()
+              ? [{ id: legacySnapshot.id, ...legacySnapshot.data(), studentId }]
+              : []),
+            ...paymentSnapshots.flatMap((snapshot, index) => snapshot.exists()
+              ? [{
+                  id: snapshot.id,
+                  ...snapshot.data(),
+                  studentId,
+                  paymentPart: snapshot.data()?.paymentPart || paymentRefs[index].part,
+                }]
+              : []),
+          ];
+          const availableParts = getAvailableProjectPaymentParts(existingPayments, studentId);
+          if (!availableParts.includes(projectPaymentPart)) {
+            throw new Error('This project payment was already completed or changed. Refresh and try again.');
+          }
+          const targetRef = paymentRefs.find(item => item.part === projectPaymentPart)?.ref;
+          transaction.set(targetRef, paymentData);
+        });
+
+        invalidateSalarySummaries();
+        invalidateProjectPaymentHistory();
+        navigate(`/project/${selectedProject.id}`);
+        return;
+      }
+
+      const batch = writeBatch(db);
       const commonPaymentData = {
         studentId: selectedStudent.id,
         amount: amountNum,
@@ -214,7 +487,7 @@ function AddPaymentPage() {
 
       await batch.commit(); // all-or-nothing
 
-      if (!isOtherPayment) {
+      if (isGroupPayment) {
         upsertPayment({ id: savedPaymentId, ...paymentData });
         patchStudent(selectedStudent.id, currentStudent => ({
           groups: [...new Set([...(currentStudent.groups || []), ...selectedGroups])],
@@ -259,8 +532,7 @@ function AddPaymentPage() {
     <div className="add-payment-page">
       <h2 className="title">ADD A PAYMENT</h2>
 
-      {!isCoach && (
-        <div className="payment-mode-toggle" role="group" aria-label="Payment type">
+      <div className="payment-mode-toggle" role="group" aria-label="Payment type">
           <button
             type="button"
             className={`payment-mode-button${paymentMode === 'group' ? ' active' : ''}`}
@@ -271,8 +543,30 @@ function AddPaymentPage() {
             }}
             disabled={isSubmitting}
           >
-            Group
+            Groups
           </button>
+          <button
+            type="button"
+            className={`payment-mode-button${paymentMode === 'project' ? ' active' : ''}`}
+            aria-pressed={paymentMode === 'project'}
+            onClick={() => {
+              setPaymentMode('project');
+              setErrors({});
+            }}
+            disabled={isSubmitting}
+          >
+            Projects
+          </button>
+          <button
+            type="button"
+            className={`payment-mode-button${paymentMode === 'workshop' ? ' active' : ''}`}
+            aria-pressed={paymentMode === 'workshop'}
+            onClick={() => { setPaymentMode('workshop'); setErrors({}); }}
+            disabled={isSubmitting}
+          >
+            Workshops
+          </button>
+          {!isCoach && (
           <button
             type="button"
             className={`payment-mode-button${paymentMode === 'other' ? ' active' : ''}`}
@@ -285,6 +579,49 @@ function AddPaymentPage() {
           >
             Other
           </button>
+          )}
+        </div>
+
+      {paymentMode === 'project' && (
+        <>
+          <div className={`form-row ${selectedProject ? 'required-filled' : 'required-empty'}`}>
+            <label>PROJECT:</label>
+            <select
+              className="input"
+              value={selectedProjectId}
+              onChange={event => {
+                setSelectedProjectId(event.target.value);
+                clearError('project');
+              }}
+              aria-invalid={Boolean(errors.project)}
+              disabled={isSubmitting}
+            >
+              <option value="">Select project</option>
+              {sortedProjects.map(project => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+          {selectedProjectId && (
+            <RefreshStatus
+              message={projectDataLoadedAt
+                ? `Project updated: ${new Date(projectDataLoadedAt).toLocaleString()}`
+                : 'Project roster and payments are not loaded yet'}
+              error={projectDataError}
+              loading={projectDataLoading}
+              onRefresh={() => loadProjectPaymentData(selectedProjectId)}
+              refreshLabel="Refresh project"
+            />
+          )}
+        </>
+      )}
+      {paymentMode === 'workshop' && (
+        <div className={`form-row ${selectedWorkshop ? 'required-filled' : 'required-empty'}`}>
+          <label>WORKSHOP:</label>
+          <select className="input" value={selectedWorkshopId} onChange={event => { setSelectedWorkshopId(event.target.value); setSelectedStudent(null); setSearchTerm(''); clearError('project'); }}>
+            <option value="">Select workshop</option>
+            {sortedWorkshops.map(workshop => <option key={workshop.id} value={workshop.id}>{workshop.name} · {workshop.date}</option>)}
+          </select>
         </div>
       )}
 
@@ -314,7 +651,12 @@ function AddPaymentPage() {
           }}
           className="input"
           aria-invalid={Boolean(errors.student)}
-          disabled={!studentsLoaded || studentsLoading || isSubmitting}
+          disabled={
+            !studentsLoaded ||
+            studentsLoading ||
+            isSubmitting ||
+            ((paymentMode === 'project' && !selectedProject) || (paymentMode === 'workshop' && !selectedWorkshop) || ((paymentMode === 'project' || paymentMode === 'workshop') && projectDataLoading))
+          }
         />
         {searchTerm && !selectedStudent && (
           <ul className="dropdown">
@@ -334,6 +676,31 @@ function AddPaymentPage() {
         )}
       </div>
 
+      {paymentMode === 'project' && selectedStudent && (
+        <div className={`form-row ${projectPaymentPart ? 'required-filled' : 'required-empty'}`}>
+          <label>PROJECT PAYMENT:</label>
+          {availableProjectPaymentParts.length === 0 ? (
+            <p className="project-payment-complete" role="status">
+              This student has already paid the full project price.
+            </p>
+          ) : (
+            <select
+              className="input"
+              value={projectPaymentPart}
+              onChange={event => {
+                setProjectPaymentPart(event.target.value);
+                clearError('projectPaymentPart');
+              }}
+              aria-invalid={Boolean(errors.projectPaymentPart)}
+            >
+              {availableProjectPaymentParts.map(part => (
+                <option key={part} value={part}>{PROJECT_PAYMENT_PART_LABELS[part]}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       <div className={`form-row ${amount ? 'required-filled' : 'required-empty'}${errors.amount && amount ? ' has-error' : ''}`}>
         <label>AMOUNT (€):</label>
         <input
@@ -344,8 +711,14 @@ function AddPaymentPage() {
             clearError('amount');
           }}
           inputMode="decimal"
+          readOnly={paymentMode === 'project'}
           aria-invalid={Boolean(errors.amount)}
         />
+        {paymentMode === 'workshop' && selectedWorkshop && (
+          <small className="workshop-price-hint">
+            Standard price: €{Number(selectedWorkshop.price || 0).toFixed(2)}. You can enter an early-bird price.
+          </small>
+        )}
       </div>
 
       <div className="payment-method-row">
@@ -383,6 +756,7 @@ function AddPaymentPage() {
         />
       </div>
 
+      {paymentMode !== 'project' && paymentMode !== 'workshop' && (
       <div className={`form-row ${startDate ? 'required-filled' : 'required-empty'}`}>
         <label>DATE FROM:</label>
         <input
@@ -396,6 +770,7 @@ function AddPaymentPage() {
           aria-invalid={Boolean(errors.startDate)}
         />
       </div>
+      )}
 
       {paymentMode === 'other' ? (
         <div className={`form-row ${reason ? 'required-filled' : 'required-empty'}`}>
@@ -415,7 +790,7 @@ function AddPaymentPage() {
             ))}
           </select>
         </div>
-      ) : (
+      ) : paymentMode === 'group' ? (
         <>
           <div className="form-row optional-field">
             <label>Time from <span>optional</span></label>
@@ -478,12 +853,21 @@ function AddPaymentPage() {
             />
           </div>
         </>
-      )}
+      ) : null}
 
       <button
         className="confirm-button"
         onClick={handleSubmit}
-        disabled={isSubmitting || !studentsLoaded || studentsLoading}
+        disabled={
+          isSubmitting ||
+          !studentsLoaded ||
+          studentsLoading ||
+          (paymentMode === 'project' && (
+            !selectedProject ||
+            projectDataLoading ||
+            availableProjectPaymentParts.length === 0
+          ))
+        }
         title={
           isSubmitting
             ? 'Saving…'

@@ -14,6 +14,12 @@ import LoginPage from './pages/LoginPage';
 import PaymentHistoryPage from './pages/PaymentHistoryPage';
 import SalaryPage from './pages/SalaryPage';
 import SchedulePage from './pages/SchedulePage';
+import CreateGroupPage from './pages/CreateGroupPage';
+import ProjectsPage from './pages/ProjectsPage';
+import ProjectDetailPage from './pages/ProjectDetailPage';
+import WorkshopsPage from './pages/WorkshopsPage';
+import WorkshopDetailPage from './pages/WorkshopDetailPage';
+import CreateWorkshopPage from './pages/CreateWorkshopPage';
 
 function AppRoutes() {
   const { user } = useUser();
@@ -25,6 +31,8 @@ function AppRoutes() {
       </Routes>
     );
   }
+
+  const isStaff = user.role === 'admin' || user.role === 'coach';
 
   return (
     <Routes>
@@ -50,6 +58,23 @@ function AppRoutes() {
       <Route path="/payment-history" element={<PaymentHistoryPage />} />
       <Route path="/salary" element={<SalaryPage />} />
       <Route path="/schedule" element={<SchedulePage />} />
+      <Route
+        path="/projects"
+        element={isStaff ? <ProjectsPage /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/project/:projectId"
+        element={isStaff ? <ProjectDetailPage /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/create-group"
+        element={user.role === 'admin'
+          ? <CreateGroupPage />
+          : <Navigate to="/groups" replace />}
+      />
+      <Route path="/workshops" element={isStaff ? <WorkshopsPage /> : <Navigate to="/" replace />} />
+      <Route path="/workshop/:workshopId" element={isStaff ? <WorkshopDetailPage /> : <Navigate to="/" replace />} />
+      <Route path="/create-workshop" element={user.role === 'admin' ? <CreateWorkshopPage /> : <Navigate to="/workshops" replace />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

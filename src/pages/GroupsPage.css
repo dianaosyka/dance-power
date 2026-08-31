@@ -14,22 +14,99 @@
 
 .headerBox {
   display: flex;
-  marginTop: 30px;
-  textAlign: center;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin-top: 30px;
+  text-align: center;
 }
 
-.logoutButton {
-  height: 40px;;
-  background-color: #d9006c;
-  color: white;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 14px;
-  margin-top: 0px;
-  margin-right: 0px;
+.main-menu {
+  position: relative;
+  z-index: 30;
+}
 
+.burger-button {
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(0, 0, 107, 0.72);
+  cursor: pointer;
+}
+
+.burger-button span {
+  display: block;
+  width: 21px;
+  height: 2px;
+  border-radius: 2px;
+  background: white;
+}
+
+.burger-button:focus-visible,
+.burger-menu button:focus-visible {
+  outline: 2px solid #65efff;
+  outline-offset: 2px;
+}
+
+.burger-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: min(290px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 14px;
+  background: #17106f;
+  box-shadow: 0 18px 45px rgba(5, 0, 42, 0.55);
+}
+
+.burger-menu button {
+  width: 100%;
+  padding: 12px 13px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: white;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.burger-menu button:hover {
+  background: rgba(91, 224, 255, 0.1);
+}
+
+.burger-menu button:last-child {
+  border-bottom: 0;
+}
+
+.burger-menu .burger-menu-logout {
+  margin-top: 5px;
+  border-radius: 8px;
+  background: rgba(217, 0, 108, 0.22);
+  color: #ffb2d8;
+}
+
+.burger-menu .burger-menu-create {
+  margin-top: 9px;
+  padding-block: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 0;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.burger-menu .burger-menu-create:hover {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .title {
@@ -48,6 +125,15 @@
   margin-bottom: 16px;
   font-weight: bold;
   cursor: pointer;
+}
+
+.create-group-button {
+  background-color: #d9006c;
+}
+
+.projects-button {
+  background-color: #5a1b9b;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .group-list {
@@ -72,20 +158,52 @@
 .add-button-container {
   display: flex;
   justify-content: center;
-  margin-top: 40px;
+  margin: 18px 0 22px;
 }
 
 .add-button {
-  padding: 0;
-  width: 53px;
-  height: 53px;
-  background-color: #d9006c;
-  color: white;
-  font-size: 24px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 9px 20px 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
+  background: linear-gradient(105deg, #d9006c, #b319aa 58%, #6d32c9);
+  color: white;
+  box-shadow: 0 10px 24px rgba(32, 0, 75, 0.34);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.7px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.add-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 13px 29px rgba(32, 0, 75, 0.44);
+}
+
+.add-button:active {
+  transform: translateY(0);
+}
+
+.add-button:focus-visible {
+  outline: 2px solid #65efff;
+  outline-offset: 3px;
+}
+
+.add-button-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.17);
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .hidden-toggle-container {

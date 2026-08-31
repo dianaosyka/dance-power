@@ -358,6 +358,11 @@
   background: rgba(113, 31, 50, 0.56);
 }
 
+.schedule-event.is-project {
+  border-left-color: #56edff;
+  background: linear-gradient(135deg, rgba(86, 237, 255, 0.2), rgba(123, 44, 191, 0.18));
+}
+
 .schedule-event.has-replacement--pending {
   border-left-color: #ffc857;
   background: rgba(108, 74, 8, 0.56);
@@ -455,6 +460,7 @@
 }
 
 .schedule-legend .legend-future { background: #ff4fd8; }
+.schedule-legend .legend-project { background: #56edff; }
 .schedule-legend .legend-missing { background: #ff7180; }
 .schedule-legend .legend-pending { background: #ffc857; }
 .schedule-legend .legend-confirmed { background: #65e58c; }

@@ -66,13 +66,17 @@ function staffRouteRequirements(pathname, role) {
     : pathname;
   const isClassDetail = /^\/group\/[^/]+\/class\/[^/]+$/.test(normalizedPath);
   const isPaymentHistory = normalizedPath === '/payment-history';
+  const isProjectDetail = /^\/project\/[^/]+$/.test(normalizedPath);
+  const isWorkshopDetail = /^\/workshop\/[^/]+$/.test(normalizedPath);
 
   return {
     students:
       normalizedPath === '/students' ||
       (normalizedPath === '/add-payment' && (role === 'admin' || role === 'coach')) ||
       isClassDetail ||
-      isPaymentHistory,
+      isPaymentHistory ||
+      isProjectDetail ||
+      isWorkshopDetail,
     payments: isClassDetail || isPaymentHistory,
   };
 }
@@ -106,13 +110,19 @@ export function DataProvider({ children }) {
   const { user } = useUser();
   const { pathname } = useLocation();
   const [groups, setGroups] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [workshops, setWorkshops] = useState([]);
   const [students, setStudents] = useState([]);
   const [payments, setPayments] = useState([]);
   const [classes, setClasses] = useState([]);
   const [coaches, setCoaches] = useState([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [workshopsLoaded, setWorkshopsLoaded] = useState(false);
   const [coachesLoaded, setCoachesLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState(null);
+  const [projectsError, setProjectsError] = useState(null);
+  const [workshopsError, setWorkshopsError] = useState(null);
   const [coachesError, setCoachesError] = useState(null);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [paymentsLoaded, setPaymentsLoaded] = useState(false);
@@ -969,13 +979,19 @@ export function DataProvider({ children }) {
       studentsLastLoadedAtRef.current = null;
       paymentsLastLoadedAtRef.current = null;
       setGroups([]);
+      setProjects([]);
+      setWorkshops([]);
       setStudents([]);
       setPayments([]);
       setClasses([]);
       setCoaches([]);
       setGroupsLoaded(false);
+      setProjectsLoaded(false);
+      setWorkshopsLoaded(false);
       setCoachesLoaded(false);
       setGroupsError(null);
+      setProjectsError(null);
+      setWorkshopsError(null);
       setCoachesError(null);
       setStudentsLoaded(false);
       setPaymentsLoaded(false);
@@ -1022,8 +1038,38 @@ export function DataProvider({ children }) {
     let unsubStudents;
     let unsubPayments;
     let unsubUsers;
+    let unsubProjects;
+    let unsubWorkshops;
 
     if (isStaff) {
+      unsubProjects = onSnapshot(
+        collection(db, 'projects'),
+        snapshot => {
+          if (!isCurrentSubscription()) return;
+          setProjects(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+          setProjectsLoaded(true);
+          setProjectsError(null);
+        },
+        error => {
+          if (!isCurrentSubscription()) return;
+          setProjectsLoaded(true);
+          setProjectsError(error?.message || String(error));
+        }
+      );
+      unsubWorkshops = onSnapshot(
+        collection(db, 'workshops'),
+        snapshot => {
+          if (!isCurrentSubscription()) return;
+          setWorkshops(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+          setWorkshopsLoaded(true);
+          setWorkshopsError(null);
+        },
+        error => {
+          if (!isCurrentSubscription()) return;
+          setWorkshopsLoaded(true);
+          setWorkshopsError(error?.message || String(error));
+        }
+      );
       unsubUsers = onSnapshot(
         query(collection(db, 'users'), where('role', 'in', ['coach', 'admin'])),
         snapshot => {
@@ -1038,6 +1084,12 @@ export function DataProvider({ children }) {
         }
       );
     } else {
+      setProjects([]);
+      setProjectsLoaded(true);
+      setProjectsError(null);
+      setWorkshops([]);
+      setWorkshopsLoaded(true);
+      setWorkshopsError(null);
       setCoaches([]);
       setCoachesLoaded(true);
       setCoachesError(null);
@@ -1127,6 +1179,8 @@ export function DataProvider({ children }) {
       unsubStudents?.();
       unsubPayments?.();
       unsubUsers?.();
+      unsubProjects?.();
+      unsubWorkshops?.();
     };
   // Staff display mode changes do not change the subscribed data set.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1157,6 +1211,12 @@ export function DataProvider({ children }) {
       groups,
       groupsLoaded,
       groupsError,
+      projects,
+      projectsLoaded,
+      projectsError,
+      workshops,
+      workshopsLoaded,
+      workshopsError,
       students,
       payments,
       studentsLoaded,

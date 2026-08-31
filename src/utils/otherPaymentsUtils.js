@@ -1,8 +1,11 @@
 export const OTHER_PAYMENT_REASONS = [
   { value: 'hall_rent', label: 'Hall rent' },
   { value: 'private_lessons', label: 'Private lessons' },
-  { value: 'workshops', label: 'Workshops' },
 ];
+
+const LEGACY_OTHER_PAYMENT_REASON_LABELS = {
+  workshops: 'Workshops',
+};
 
 export function formatEuropeanDate(dateValue) {
   const [year, month, day] = String(dateValue || '').split('-');
@@ -24,6 +27,7 @@ export function getEuropeanMonthFromMonthValue(monthValue) {
 
 export function getOtherPaymentReasonLabel(reason) {
   return OTHER_PAYMENT_REASONS.find(option => option.value === reason)?.label
+    || LEGACY_OTHER_PAYMENT_REASON_LABELS[reason]
     || reason
     || 'Unknown';
 }

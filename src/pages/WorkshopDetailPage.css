@@ -1,0 +1,45 @@
+.workshop-detail-page { min-height: 100vh; padding: 22px 16px 50px; background: radial-gradient(circle at 90% 0, #8b087a55, transparent 34%), linear-gradient(145deg, #171070, #37035d); color: #fff; }
+.workshop-detail-shell { width: min(100%, 840px); margin: 0 auto; }
+.workshop-detail-header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-bottom: 20px; }
+.workshop-detail-header > div { grid-column: 2; text-align: center; }
+.workshop-detail-header p, .workshop-panel-heading p { margin: 0 0 4px; color: #7cecf8; font-size: 9px; font-weight: 900; letter-spacing: 2.5px; }
+.workshop-detail-header h1 { max-width: 520px; margin: 0; overflow: hidden; font-size: clamp(27px, 5vw, 40px); text-overflow: ellipsis; white-space: nowrap; }
+.workshop-detail-header > button { justify-self: start; min-height: 40px; padding: 0 14px; border: 1px solid #ffffff42; border-radius: 999px; background: #08045166; color: #fff; font-weight: 800; cursor: pointer; }
+.workshop-summary { display: grid; grid-template-columns: 1fr .55fr 1.6fr; gap: 1px; overflow: hidden; margin-bottom: 12px; border: 1px solid #9befff2e; border-radius: 15px; background: #ffffff1c; }
+.workshop-summary > div { display: grid; gap: 4px; padding: 15px 17px; background: #09054fbd; }
+.workshop-summary span { color: #ffffff88; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.workshop-summary strong { font-size: 13px; }
+.workshop-detail-error { padding: 10px 12px; border-radius: 9px; background: #b9144647; color: #ffd3e2; }
+.workshop-panel { margin-top: 12px; padding: 18px; border: 1px solid #9befff2e; border-radius: 16px; background: #09054fbd; }
+.workshop-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workshop-panel-heading h2 { margin: 0; font-size: 19px; }
+.workshop-panel-heading h2 span { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 5px; border-radius: 999px; background: #ffffff17; color: #ffffffa3; font-size: 10px; }
+.workshop-panel-heading > button { min-height: 38px; padding: 0 13px; border: 0; border-radius: 10px; background: linear-gradient(105deg, #27c7db, #dc1b9f); color: #fff; font-weight: 800; cursor: pointer; }
+.workshop-signup-search { display: grid; grid-template-columns: 1fr auto; gap: 9px; margin-top: 15px; }
+.workshop-student-search { position: relative; }
+.workshop-student-search > input { box-sizing: border-box; width: 100%; height: 42px; padding: 0 12px; border: 1px solid #ffffff35; border-radius: 10px; background: #ffffff0c; color: #fff; font: inherit; }
+.workshop-student-search ul { position: absolute; z-index: 4; top: 46px; right: 0; left: 0; max-height: 230px; overflow-y: auto; margin: 0; padding: 5px; border: 1px solid #ffffff35; border-radius: 10px; background: #17106f; box-shadow: 0 15px 35px #02002199; list-style: none; }
+.workshop-student-search li button { width: 100%; padding: 9px; border: 0; border-radius: 7px; background: transparent; color: #fff; text-align: left; cursor: pointer; }
+.workshop-student-search li button:hover { background: #6feeff18; }
+.workshop-search-empty { padding: 10px; color: #ffffff88; font-size: 12px; }
+.workshop-sign-button { min-height: 42px; padding: 0 15px; border: 1px solid #ffffff30; border-radius: 10px; background: #7a1b9e; color: #fff; font-weight: 800; cursor: pointer; }
+.workshop-sign-button:disabled { opacity: .45; cursor: default; }
+.workshop-participant-list, .workshop-payment-list { display: grid; gap: 0; margin: 14px 0 0; padding: 0; list-style: none; }
+.workshop-participant-list li, .workshop-payment-list li { display: flex; align-items: center; gap: 12px; min-height: 48px; border-top: 1px solid #ffffff13; }
+.workshop-participant-list li > div, .workshop-payment-list li > div { display: grid; gap: 3px; min-width: 0; margin-right: auto; }
+.workshop-participant-list small, .workshop-payment-list small { color: #ffffff7d; font-size: 10px; }
+.workshop-participant-list > li > span { padding: 4px 7px; border-radius: 999px; font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.workshop-participant-list .is-paid { background: #26d4a51c; color: #6af0ca; }
+.workshop-participant-list .is-unpaid { background: #ffbf321a; color: #ffd16b; }
+.workshop-participant-list li > button { padding: 6px 9px; border: 1px solid #ff62ba50; border-radius: 8px; background: transparent; color: #ff9dd1; font-size: 10px; font-weight: 800; cursor: pointer; }
+.workshop-participant-list li > .workshop-remove-student { border-color: #ffffff24; color: #ffffff70; }
+.workshop-participant-list li > .workshop-remove-student:hover { border-color: #ff6f8a66; color: #ff9cab; }
+.workshop-payment-list > li > strong { color: #84eff8; }
+.workshop-payment-list li { display: block; }
+.workshop-payment-list li > button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0; border: 0; background: transparent; color: #fff; text-align: left; cursor: pointer; }
+.workshop-payment-list li > button:hover { background: #65eafa0b; }
+.workshop-payment-list li > button > div { display: grid; gap: 3px; min-width: 0; margin-right: auto; }
+.workshop-payment-list li > button > strong { color: #84eff8; }
+.workshop-payment-list li > button > span { color: #ffffff85; font-size: 21px; }
+.workshop-panel-empty { margin: 18px 0 2px; color: #ffffff78; font-size: 12px; text-align: center; }
+@media (max-width: 600px) { .workshop-detail-header { grid-template-columns: auto 1fr; gap: 10px; } .workshop-detail-header > div { grid-column: 2; text-align: right; } .workshop-detail-header h1 { font-size: 25px; } .workshop-summary { grid-template-columns: 1fr 1fr; } .workshop-summary-coaches { grid-column: 1 / -1; } .workshop-panel { padding: 14px; } .workshop-signup-search { grid-template-columns: 1fr; } .workshop-sign-button { justify-self: end; } }

@@ -24,6 +24,12 @@ jest.mock('./pages/GroupClassDetailPage', () => () => null);
 jest.mock('./pages/PaymentHistoryPage', () => () => null);
 jest.mock('./pages/SalaryPage', () => () => null);
 jest.mock('./pages/SchedulePage', () => () => null);
+jest.mock('./pages/CreateGroupPage', () => () => null);
+jest.mock('./pages/ProjectsPage', () => () => null);
+jest.mock('./pages/ProjectDetailPage', () => () => null);
+jest.mock('./pages/WorkshopsPage', () => () => null);
+jest.mock('./pages/WorkshopDetailPage', () => () => null);
+jest.mock('./pages/CreateWorkshopPage', () => () => null);
 
 test('renders the login choices for a signed-out user', () => {
   render(<App />);

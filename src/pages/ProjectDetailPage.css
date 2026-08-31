@@ -1,0 +1,821 @@
+.project-detail-page {
+  min-height: 100vh;
+  padding: 18px 14px 48px;
+  background:
+    radial-gradient(circle at top right, rgba(222, 56, 158, 0.22), transparent 34%),
+    linear-gradient(160deg, #28004b 0%, #4b0082 52%, #30005c 100%);
+  color: #fff;
+}
+
+.project-detail-shell {
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
+.project-detail-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0 8px;
+}
+
+.project-detail-back {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.project-detail-back span {
+  font-size: 23px;
+  line-height: 0.7;
+}
+
+.project-detail-heading {
+  min-width: 0;
+}
+
+.project-detail-heading > p,
+.project-section-heading p {
+  margin: 0 0 4px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.project-detail-heading h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(25px, 7vw, 40px);
+  line-height: 1.08;
+}
+
+.project-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.project-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.project-status--upcoming {
+  border-color: rgba(91, 207, 255, 0.48);
+  background: rgba(43, 170, 223, 0.18);
+  color: #b9edff;
+}
+
+.project-status--active {
+  border-color: rgba(99, 245, 166, 0.52);
+  background: rgba(31, 190, 102, 0.18);
+  color: #a8ffd0;
+}
+
+.project-status--completed,
+.project-status--hidden {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.project-detail-refresh {
+  margin: 4px 0 14px;
+}
+
+.project-detail-refresh .refresh-status__message {
+  flex: 1;
+  text-align: left;
+}
+
+.project-overview-card,
+.project-schedule-card,
+.project-roster-card,
+.project-payment-form-card,
+.project-payments-card {
+  box-sizing: border-box;
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  background: rgba(17, 0, 52, 0.55);
+  box-shadow: 0 16px 38px rgba(10, 0, 31, 0.17);
+  backdrop-filter: blur(8px);
+}
+
+.project-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.project-section-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.project-section-heading > strong {
+  flex: 0 0 auto;
+  color: #ff92cb;
+  font-size: 19px;
+}
+
+.project-price {
+  font-size: 25px !important;
+}
+
+.project-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.project-metadata-grid > div {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(21, 0, 63, 0.84);
+}
+
+.project-metadata-grid dt {
+  margin-bottom: 5px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.project-metadata-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.project-weekly-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.project-weekly-slots span {
+  padding: 6px 9px;
+  border: 1px solid rgba(99, 217, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(48, 175, 224, 0.1);
+  color: #c8f2ff;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.project-schedule-heading {
+  margin-bottom: 8px;
+}
+
+.project-progress-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 10px;
+}
+
+.project-progress-track {
+  height: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.project-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d9006c, #ff83ca);
+  transition: width 0.25s ease;
+}
+
+.project-schedule-list,
+.project-roster-list,
+.project-payments-list,
+.project-search-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-schedule-list {
+  display: grid;
+  gap: 7px;
+  max-height: 430px;
+  padding-right: 3px;
+  overflow-y: auto;
+}
+
+.project-schedule-list li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.project-schedule-list li.is-elapsed {
+  opacity: 0.58;
+}
+
+.project-schedule-list li.is-today {
+  border-color: rgba(255, 146, 203, 0.66);
+  background: rgba(217, 0, 108, 0.15);
+}
+
+.project-class-number {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.project-schedule-list strong,
+.project-schedule-list time {
+  display: block;
+}
+
+.project-schedule-list strong {
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.project-schedule-list time,
+.project-schedule-list small {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 9px;
+}
+
+.project-schedule-list li.is-today small {
+  color: #ffacd7;
+  font-weight: 850;
+}
+
+.project-inline-warning,
+.project-form-error,
+.project-action-message {
+  margin: 12px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 155, 172, 0.45);
+  border-radius: 9px;
+  background: rgba(176, 15, 49, 0.2);
+  color: #ffd1d9;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.project-student-search {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.project-student-search > label,
+.project-payment-form-card form > label > span,
+.project-payment-methods legend {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.63);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-student-search > input,
+.project-payment-form-card input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.project-student-search > input::placeholder,
+.project-payment-form-card input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.project-student-search > input:focus,
+.project-payment-form-card input:focus {
+  border-color: #ff91ca;
+  box-shadow: 0 0 0 3px rgba(255, 102, 184, 0.17);
+}
+
+.project-student-search > input:disabled,
+.project-payment-form-card input:disabled {
+  opacity: 0.55;
+}
+
+.project-field-help {
+  margin: 7px 0 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+}
+
+.project-search-results {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: 245px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px;
+  background: #fff;
+  color: #241035;
+  box-shadow: 0 15px 32px rgba(13, 0, 31, 0.35);
+}
+
+.project-search-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #ece4f0;
+}
+
+.project-search-results li:last-child {
+  border-bottom: 0;
+}
+
+.project-search-results strong,
+.project-search-results small {
+  display: block;
+}
+
+.project-search-results strong {
+  font-size: 12px;
+}
+
+.project-search-results small {
+  margin-top: 2px;
+  color: #786784;
+  font-size: 9px;
+}
+
+.project-search-results button {
+  min-height: 34px;
+  margin: 0;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: #d9006c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.project-search-empty {
+  color: #685673;
+  font-size: 11px;
+}
+
+.project-action-message {
+  margin: 0 0 12px;
+}
+
+.project-action-message.is-success {
+  border-color: rgba(76, 232, 145, 0.4);
+  background: rgba(22, 164, 84, 0.16);
+  color: #baffd8;
+}
+
+.project-roster-list,
+.project-payments-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-roster-list > li,
+.project-payments-list > li {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.project-roster-list > li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.project-roster-person,
+.project-payment-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-person-avatar,
+.project-payment-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(217, 0, 108, 0.72), rgba(114, 31, 171, 0.8));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.project-roster-person > span:last-child,
+.project-payment-main > span:last-child {
+  min-width: 0;
+}
+
+.project-roster-person strong,
+.project-roster-person small,
+.project-payment-main strong,
+.project-payment-main small,
+.project-payment-amount strong,
+.project-payment-amount small {
+  display: block;
+}
+
+.project-roster-person strong,
+.project-payment-main strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-roster-person small,
+.project-payment-main small,
+.project-payment-amount small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.53);
+  font-size: 9px;
+}
+
+.project-payment-state {
+  justify-self: end;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-payment-state.is-paid {
+  background: rgba(42, 211, 117, 0.17);
+  color: #9fffc9;
+}
+
+.project-payment-state.is-unpaid {
+  background: rgba(255, 182, 52, 0.15);
+  color: #ffe3a6;
+}
+
+.project-payment-state.is-unknown {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.project-roster-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.project-small-button,
+.project-delete-payment,
+.project-form-close,
+.project-payment-methods button,
+.project-payment-submit {
+  margin: 0;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.project-small-button {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 9px;
+}
+
+.project-small-button.is-primary {
+  background: #d9006c;
+}
+
+.project-small-button.is-muted {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.project-small-button:disabled,
+.project-search-results button:disabled,
+.project-delete-payment:disabled,
+.project-form-close:disabled,
+.project-payment-methods button:disabled,
+.project-payment-submit:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.project-form-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 22px;
+}
+
+.project-payment-form-card form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.project-payment-form-card form > label {
+  min-width: 0;
+}
+
+.project-payment-form-card input {
+  min-width: 0;
+}
+
+.project-payment-form-card input[type='date'] {
+  color-scheme: dark;
+}
+
+.project-payment-methods {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.project-payment-methods > div {
+  display: flex;
+  width: fit-content;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+}
+
+.project-payment-methods button {
+  min-height: 31px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+}
+
+.project-payment-methods button.is-selected {
+  background: #d9006c;
+  color: #fff;
+}
+
+.project-payment-methods > small {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 9px;
+}
+
+.project-form-error,
+.project-payment-submit {
+  grid-column: 1 / -1;
+}
+
+.project-form-error {
+  margin: 0;
+}
+
+.project-payment-submit {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #d9006c, #f02c91);
+  font-size: 12px;
+}
+
+.project-payments-list > li {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.project-payment-icon {
+  background: rgba(62, 204, 132, 0.18);
+  color: #aaffd0;
+}
+
+.project-payment-amount {
+  text-align: right;
+}
+
+.project-payment-amount strong {
+  color: #b5ffd4;
+  font-size: 13px;
+}
+
+.project-delete-payment {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 125, 145, 0.28);
+  border-radius: 8px;
+  background: rgba(190, 25, 54, 0.14);
+  color: #ffb7c4;
+  font-size: 9px;
+}
+
+.project-empty-message {
+  margin: 0;
+  padding: 16px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  text-align: center;
+}
+
+.project-detail-state {
+  display: grid;
+  min-height: calc(100vh - 70px);
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.project-detail-state h1,
+.project-detail-state p {
+  margin: 0;
+}
+
+.project-detail-state p {
+  max-width: 430px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-detail-state button {
+  min-height: 42px;
+  margin-top: 6px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #d9006c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.project-detail-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ff91ca;
+  border-radius: 50%;
+  animation: project-detail-spin 0.8s linear infinite;
+}
+
+.project-detail-page button:focus-visible,
+.project-detail-page input:focus-visible {
+  outline: 2px solid #80eaff;
+  outline-offset: 2px;
+}
+
+@keyframes project-detail-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 560px) {
+  .project-detail-page {
+    padding: 12px 10px 36px;
+  }
+
+  .project-overview-card,
+  .project-schedule-card,
+  .project-roster-card,
+  .project-payment-form-card,
+  .project-payments-card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .project-detail-header {
+    gap: 10px;
+  }
+
+  .project-detail-back {
+    min-height: 34px;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+
+  .project-metadata-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-payment-form-card form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-payment-form-card form > *,
+  .project-payment-methods,
+  .project-form-error,
+  .project-payment-submit {
+    grid-column: 1;
+  }
+
+  .project-payments-list > li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .project-delete-payment {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .project-progress-copy {
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-progress-track span,
+  .project-detail-spinner {
+    transition: none;
+    animation: none;
+  }
+}

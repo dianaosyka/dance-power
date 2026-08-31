@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { doc, getDocFromServer } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocFromServer,
+  getDocsFromServer,
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
@@ -13,7 +18,12 @@ import {
   getOtherPaymentsTotal,
 } from '../utils/otherPaymentsUtils';
 import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
+import {
+  getProjectSalaryClasses,
+  hasProjectSessionsForSalaryMonth,
+} from '../utils/projectSalaryUtils';
 import RefreshStatus from '../components/RefreshStatus';
+import { getWorkshopSalary, getWorkshopMonth } from '../utils/workshopUtils';
 import './SalaryPage.css';
 
 function getCurrentMonthValue() {
@@ -29,7 +39,7 @@ function getSalarySummaryStorageKey(user, monthValue) {
   if (!user?.role || !monthValue) return null;
 
   const userKey = user.id || user.role;
-  return `salarySummary:v5:${user.role}:${userKey}:${monthValue}`;
+  return `salarySummary:v11:${user.role}:${userKey}:${monthValue}`;
 }
 
 function getSavedSalarySummary(storageKey) {
@@ -44,6 +54,7 @@ function getSavedSalarySummary(storageKey) {
     return {
       summary,
       isStale:
+        Number.isFinite(Number(summary?.invalidatedAt)) ||
         !Number.isFinite(generatedAt) ||
         Date.now() - generatedAt >= STAFF_DATA_CACHE_TTL_MS,
     };
@@ -71,7 +82,7 @@ function getCoachIdsForClass(classData, group) {
   return group?.coach ? [group.coach] : [];
 }
 
-function buildLessonsByCoach(classRows) {
+function buildLessonsByCoach(classRows, workshopRows = []) {
   const lessonsByCoach = new Map();
 
   classRows.forEach(row => {
@@ -80,6 +91,7 @@ function buildLessonsByCoach(classRows) {
         id: 'no-coach',
         name: 'No coach',
         lessons: [],
+        workshops: [],
       };
 
       lessonsByCoach.set('no-coach', {
@@ -94,6 +106,7 @@ function buildLessonsByCoach(classRows) {
         id: coachId,
         name: row.coachNamesById[coachId] || coachId,
         lessons: [],
+        workshops: [],
       };
 
       lessonsByCoach.set(coachId, {
@@ -103,10 +116,25 @@ function buildLessonsByCoach(classRows) {
     });
   });
 
+  workshopRows.forEach(row => {
+    if (!row.coachId) return;
+    const existing = lessonsByCoach.get(row.coachId) || {
+      id: row.coachId,
+      name: row.coachName || row.coachId,
+      lessons: [],
+      workshops: [],
+    };
+    lessonsByCoach.set(row.coachId, {
+      ...existing,
+      workshops: [...(existing.workshops || []), row],
+    });
+  });
+
   return [...lessonsByCoach.values()]
     .map(coach => ({
       ...coach,
       lessons: coach.lessons.sort((a, b) => a.date.localeCompare(b.date)),
+      workshops: (coach.workshops || []).sort((a, b) => String(a.date).localeCompare(String(b.date))),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -115,13 +143,19 @@ function SalaryPage() {
   const navigate = useNavigate();
   const {
     groups,
+    projects,
+    workshops = [],
     payments,
     students,
     coaches,
     db,
     groupsLoaded,
+    projectsLoaded,
+    workshopsLoaded,
     coachesLoaded,
     groupsError,
+    projectsError,
+    workshopsError,
     coachesError,
     studentsLoaded,
     paymentsLoaded,
@@ -217,6 +251,8 @@ function SalaryPage() {
     if (
       !selectedMonth ||
       !groupsLoaded ||
+      !projectsLoaded ||
+      !workshopsLoaded ||
       !coachesLoaded ||
       !hasStudents ||
       !hasPayments ||
@@ -277,10 +313,12 @@ function SalaryPage() {
       );
 
       const classRows = [];
+      const workshopSalaryRows = [];
       let grossTotal = otherPaymentsTotal;
       let rentTotal = 580;
       let coachesTotal = 0;
       let classesEarnedTotal = 0;
+      let workshopEarnedTotal = 0;
 
       for (const group of groups) {
         const pastClassDocs = await loadPastClassDocs(group.id);
@@ -365,6 +403,115 @@ function SalaryPage() {
         }
       }
 
+
+      // Project revenue and coach pay stay fully scoped to each project. A
+      // deterministic payment document per student means one paid person can
+      // only be counted once, matching permanent-group salary semantics while
+      // keeping project payments out of the root payments collection.
+      for (const project of projects) {
+        const coachIds = project?.coach ? [project.coach] : [];
+        if (isCoach && !coachIds.includes(user.id)) continue;
+        if (!hasProjectSessionsForSalaryMonth(project, runMonth)) continue;
+
+        const projectPaymentSnapshot = await getDocsFromServer(
+          collection(db, `projects/${project.id}/payments`)
+        );
+        const projectPayments = projectPaymentSnapshot.docs
+          .map(paymentDoc => ({ id: paymentDoc.id, ...paymentDoc.data() }));
+        const projectSalaryClasses = getProjectSalaryClasses({
+          project,
+          payments: projectPayments,
+          monthValue: runMonth,
+        });
+
+        for (const session of projectSalaryClasses) {
+          const studentCount = session.studentCount;
+          const grossPerClass = session.gross;
+          const coachRate = session.coachRate;
+          const coachPay = session.coachPay;
+          const classCoachesTotal = coachIds.length * coachPay;
+          const classEarned = grossPerClass - classCoachesTotal;
+
+          grossTotal += grossPerClass;
+          coachesTotal += classCoachesTotal;
+          classesEarnedTotal += classEarned;
+
+          coachIds.forEach(coachId => {
+            const existing = coachTotals.get(coachId) || {
+              id: coachId,
+              name: coachNames.get(coachId) || coachId,
+              salary: 0,
+              classes: 0,
+              students: 0,
+            };
+            coachTotals.set(coachId, {
+              ...existing,
+              salary: existing.salary + coachPay,
+              classes: existing.classes + 1,
+              students: existing.students + studentCount,
+            });
+          });
+
+          classRows.push({
+            id: `project-${project.id}-${session.date}-${session.time}`,
+            projectId: project.id,
+            groupName: project.name,
+            date: session.date,
+            comment: '',
+            gross: grossPerClass,
+            rent: 0,
+            coaches: classCoachesTotal,
+            earned: classEarned,
+            studentCount,
+            coachRate,
+            coachPay,
+            coachIds,
+            coachNames: coachIds.map(coachId => coachNames.get(coachId) || coachId),
+            coachNamesById: Object.fromEntries(
+              coachIds.map(coachId => [coachId, coachNames.get(coachId) || coachId])
+            ),
+          });
+        }
+      }
+
+      // Workshop revenue belongs to the month in which the workshop takes
+      // place, regardless of when participants paid.
+      for (const workshop of workshops) {
+        if (getWorkshopMonth(workshop.date) !== runMonth) continue;
+        const coachIds = [...new Set((workshop.coaches || []).filter(Boolean))];
+        if (isCoach && !coachIds.includes(user.id)) continue;
+        const snapshot = await getDocsFromServer(collection(db, `workshops/${workshop.id}/payments`));
+        const workshopPayments = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+        const workshopSalary = getWorkshopSalary({ workshop, payments: workshopPayments, monthValue: runMonth });
+        if (!workshopSalary) continue;
+
+        grossTotal += workshopSalary.gross;
+        coachesTotal += workshopSalary.coachesTotal;
+        workshopEarnedTotal += workshopSalary.ownerEarned;
+        coachIds.forEach(coachId => {
+          const existing = coachTotals.get(coachId) || { id: coachId, name: coachNames.get(coachId) || coachId, salary: 0, classes: 0, students: 0 };
+          coachTotals.set(coachId, {
+            ...existing,
+            salary: existing.salary + workshopSalary.coachPayEach,
+            students: existing.students + workshopSalary.studentCount,
+          });
+        });
+        const rowCoachIds = isCoach ? coachIds.filter(id => id === user.id) : coachIds;
+        rowCoachIds.forEach(coachId => {
+          workshopSalaryRows.push({
+            id: `${workshop.id}-${coachId}`,
+            workshopId: workshop.id,
+            name: workshop.name || workshop.id,
+            date: workshop.date,
+            gross: workshopSalary.gross,
+            coachId,
+            coachName: coachNames.get(coachId) || coachId,
+            coachPay: workshopSalary.coachPayEach,
+            studentCount: workshopSalary.studentCount,
+          });
+        });
+      }
+
       const sortedClassRows = classRows.sort((a, b) => a.date.localeCompare(b.date));
       const sortedCoachTotals = [...coachTotals.values()]
         .filter(coach => coach.salary > 0 || coach.classes > 0)
@@ -373,8 +520,8 @@ function SalaryPage() {
         ? sortedCoachTotals.filter(coach => coach.id === user.id)
         : sortedCoachTotals;
       const visibleLessonsByCoach = isCoach
-        ? buildLessonsByCoach(sortedClassRows).filter(coach => coach.id === user.id)
-        : buildLessonsByCoach(sortedClassRows);
+        ? buildLessonsByCoach(sortedClassRows, workshopSalaryRows).filter(coach => coach.id === user.id)
+        : buildLessonsByCoach(sortedClassRows, workshopSalaryRows);
       const myCoachTotal = visibleCoachTotals[0] || {
         id: user?.id,
         name: coachNames.get(user?.id) || 'My salary',
@@ -387,6 +534,8 @@ function SalaryPage() {
         generatedAt: Date.now(),
         grossTotal,
         classesEarnedTotal,
+        workshopEarnedTotal,
+        workshopSalaryRows,
         otherEarnedTotal: otherPaymentsTotal,
         otherPaymentsTotal,
         otherPaymentRows,
@@ -431,6 +580,10 @@ function SalaryPage() {
     coaches,
     groups,
     groupsLoaded,
+    projects,
+    projectsLoaded,
+    workshops,
+    workshopsLoaded,
     coachesLoaded,
     db,
     invalidatePastClasses,
@@ -448,8 +601,8 @@ function SalaryPage() {
 
   const handleSalaryAction = async () => {
     if (isRefreshingData || calculationInProgress.current) return;
-    if (!groupsLoaded || !coachesLoaded) {
-      setError('Groups and coaches must finish loading before salary can be calculated.');
+    if (!groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded) {
+      setError('Groups, projects, workshops, and coaches must finish loading before salary can be calculated.');
       return;
     }
 
@@ -509,6 +662,8 @@ function SalaryPage() {
         : 'Calculate salary';
   const salarySourceError = [
     groupsError ? `Groups: ${groupsError}` : '',
+    projectsError ? `Projects: ${projectsError}` : '',
+    workshopsError ? `Workshops: ${workshopsError}` : '',
     coachesError ? `Coaches: ${coachesError}` : '',
     studentsError ? `Students: ${studentsError}` : '',
     paymentsError ? `Payments: ${paymentsError}` : '',
@@ -516,7 +671,7 @@ function SalaryPage() {
   const salaryStatusError = salarySourceError
     || error
     || (summaryIsStale && summary && !isCalculating
-      ? 'Cached salary is older than the refresh window and is awaiting recalculation.'
+      ? 'Saved salary may be outdated. It remains visible until you choose Refresh salary.'
       : '');
 
   if (!isAdmin && !isCoach) {
@@ -555,11 +710,11 @@ function SalaryPage() {
             ? `Last updated: ${new Date(summary.generatedAt).toLocaleString()}`
             : 'Not updated yet'}
           error={salaryStatusError}
-          loading={salaryActionLoading || !groupsLoaded || !coachesLoaded}
+          loading={salaryActionLoading || !groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded}
           onRefresh={handleSalaryAction}
-          disabled={!groupsLoaded || !coachesLoaded}
+          disabled={!groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded}
           refreshLabel={salaryActionLabel}
-          loadingLabel={!groupsLoaded || !coachesLoaded ? 'Loading data…' : 'Refreshing…'}
+          loadingLabel={!groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded ? 'Loading data…' : 'Refreshing…'}
           className="salary-refresh-status"
         />
       </div>
@@ -575,6 +730,10 @@ function SalaryPage() {
               <div>
                 <span>Earned from classes</span>
                 <strong>{Number(summary.classesEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div>
+                <span>Earned from workshops</span>
+                <strong>{Number(summary.workshopEarnedTotal || 0).toFixed(2)}€</strong>
               </div>
               <div>
                 <span>Earned from other</span>
@@ -628,7 +787,7 @@ function SalaryPage() {
           </ul>
 
           <div className="salary-lessons-header">
-            <h3 className="salary-heading">LESSONS</h3>
+            <h3 className="salary-heading">{isAdmin ? 'COACH BREAKDOWN' : 'MY BREAKDOWN'}</h3>
             <button
               className="salary-small-button"
               onClick={() => setShowLessonMoney(current => !current)}
@@ -637,8 +796,8 @@ function SalaryPage() {
             </button>
           </div>
           <ul className="salary-list">
-            {summary.classRows.length === 0 ? (
-              <li className="salary-row">No lessons in this month.</li>
+            {summary.lessonsByCoach.length === 0 ? (
+              <li className="salary-row">No lessons or workshop earnings in this month.</li>
             ) : (
               summary.lessonsByCoach.map(coach => (
                 <li key={coach.id} className="salary-coach-lessons">
@@ -650,11 +809,15 @@ function SalaryPage() {
                         className={`salary-lesson-row${row.comment ? ' has-urgent-comment' : ''}`}
                         role="button"
                         tabIndex={0}
-                        onClick={() => navigate(`/group/${row.groupId}/class/${row.date}`)}
+                        onClick={() => navigate(row.projectId
+                          ? `/project/${row.projectId}`
+                          : `/group/${row.groupId}/class/${row.date}`)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
-                            navigate(`/group/${row.groupId}/class/${row.date}`);
+                            navigate(row.projectId
+                              ? `/project/${row.projectId}`
+                              : `/group/${row.groupId}/class/${row.date}`);
                           }
                         }}
                       >
@@ -678,6 +841,33 @@ function SalaryPage() {
                             <strong>{row.comment}</strong>
                           </div>
                         )}
+                      </li>
+                    ))}
+                    {(coach.workshops || []).map(workshop => (
+                      <li
+                        key={workshop.id}
+                        className="salary-workshop-row"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => navigate(`/workshop/${workshop.workshopId}`)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            navigate(`/workshop/${workshop.workshopId}`);
+                          }
+                        }}
+                      >
+                        <div className="salary-workshop-main">
+                          <div>
+                            <span className="salary-workshop-badge">Workshop</span>
+                            <strong>{workshop.name}</strong>
+                          </div>
+                          <strong>{Number(workshop.coachPay || 0).toFixed(2)}€</strong>
+                        </div>
+                        <div className="salary-workshop-meta">
+                          <span>{workshop.date}</span>
+                          <span>{workshop.studentCount} paid</span>
+                        </div>
                       </li>
                     ))}
                   </ul>

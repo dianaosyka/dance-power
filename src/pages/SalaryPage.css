@@ -198,6 +198,59 @@
   font-size: 14px;
 }
 
+.salary-workshop-row {
+  padding: 11px 0;
+  border-bottom: 1px solid #9b59b6;
+  cursor: pointer;
+}
+
+.salary-workshop-row:hover,
+.salary-workshop-row:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+
+.salary-workshop-main,
+.salary-workshop-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.salary-workshop-main > div {
+  display: grid;
+  gap: 3px;
+}
+
+.salary-workshop-main > strong {
+  flex-shrink: 0;
+  color: #8ef58e;
+}
+
+.salary-workshop-main span,
+.salary-workshop-meta span {
+  color: #ddd;
+  font-size: 11px;
+}
+
+.salary-workshop-main .salary-workshop-badge {
+  width: max-content;
+  margin-bottom: 2px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(91, 226, 255, 0.14);
+  color: #8ff4ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.salary-workshop-meta {
+  margin-top: 6px;
+}
+
 .salary-other-payment-main,
 .salary-other-payment-dates {
   display: flex;
