@@ -750,7 +750,9 @@ function StudentDetailPage() {
     : 'not updated yet';
   const detailDataStatus = (
     <RefreshStatus
-      message={`Last updated — Student: ${formatCheckedAt(studentDataLoadedAt)}; Payments: ${formatCheckedAt(paymentDataLoadedAt)}`}
+      message={(studentDataLoadedAt || paymentDataLoadedAt)
+        ? formatCheckedAt(Math.max(studentDataLoadedAt || 0, paymentDataLoadedAt || 0))
+        : 'Not updated yet'}
       error={(studentDataError || paymentDataError)
         ? [
             studentDataError ? `Student: ${studentDataError}` : '',
@@ -1024,7 +1026,7 @@ function StudentDetailPage() {
         </p>
         <h1 className="price">{currentPayment.amount}€</h1>
 
-        <div className="group-list">
+        <div className="payment-group-list">
           GROUPS:
           {(currentPayment.groups || []).map(gid => {
             const g = groups.find(gr => gr.id === gid);

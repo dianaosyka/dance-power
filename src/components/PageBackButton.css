@@ -1,0 +1,42 @@
+.page-back-button {
+  position: fixed;
+  z-index: 100;
+  top: 22px;
+  left: max(18px, env(safe-area-inset-left));
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(112, 240, 255, .34);
+  border-radius: 50%;
+  background: rgba(8, 4, 81, .78);
+  box-shadow: 0 8px 22px rgba(3, 0, 48, .24);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(9px);
+}
+
+.page-back-button span {
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.page-back-button:hover,
+.page-back-button:focus-visible {
+  border-color: #70f0ff;
+  background: rgba(18, 9, 112, .92);
+  outline: none;
+}
+
+@media (max-width: 600px) {
+  .page-back-button {
+    top: 14px;
+    left: max(12px, env(safe-area-inset-left));
+    width: 40px;
+    height: 40px;
+  }
+}

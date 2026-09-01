@@ -35,6 +35,30 @@ h1 {
   border-bottom: 1px solid #9b59b6;
 }
 
+.student-list .class-item:last-child {
+  border-bottom: 0;
+}
+
+.attendance-list-header,
+.attendance-student-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 80px;
+  align-items: center;
+  column-gap: 12px;
+}
+.attendance-list-header span:nth-child(2),
+.attendance-list-header span:nth-child(3),
+.attendance-payment,
+.attendance-mark { text-align: center; justify-self: center; }
+.attendance-person { min-width: 0; cursor: pointer; }
+.attendance-payment { cursor: pointer; }
+.attendance-mark { grid-column: 3; }
+
+@media (max-width: 520px) {
+  .attendance-list-header,
+  .attendance-student-row { grid-template-columns: minmax(0, 1fr) 74px 54px; column-gap: 7px; }
+}
+
 .comment-box {
   margin: 20px 0 8px;
   padding: 14px;
@@ -148,32 +172,206 @@ h1 {
   gap: 12px;
   margin: 18px 0;
   padding: 15px;
-  border: 1px solid rgba(134, 239, 172, 0.45);
+  border: 1px solid rgba(112, 240, 255, 0.28);
   border-radius: 10px;
-  background: rgba(34, 197, 94, 0.13);
+  background: rgba(5, 10, 87, 0.58);
 }
 
 .future-class-callout strong,
 .future-class-callout span { display: block; }
+.future-class-callout strong { color: #70f0ff; }
 .future-class-callout span { margin-top: 3px; color: rgba(255,255,255,.68); font-size: 12px; }
 .future-class-callout button {
   width: 100%;
   padding: 12px;
   border: 0;
   border-radius: 8px;
-  background: #22a958;
+  background: linear-gradient(105deg, #27c7db, #7478e9 55%, #dc1b9f);
   color: white;
   font-weight: 800;
   cursor: pointer;
 }
-.future-class-callout button:hover { background: #299e58; }
+.future-class-callout button:hover { filter: brightness(1.08); }
+
+.past-class-coach-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 0 20px;
+  color: rgba(255,255,255,.68);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.past-class-coach-field select {
+  min-width: 190px;
+  height: 38px;
+  padding: 0 34px 0 11px;
+  border: 1px solid rgba(112, 240, 255, .28);
+  border-radius: 9px;
+  background: rgba(9, 10, 101, .56);
+  color: white;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.past-class-coach-field select:disabled { opacity: .58; }
+
+.unpaid-attendees {
+  margin: 18px 0;
+  padding: 15px;
+  border: 1px solid rgba(112, 240, 255, .24);
+  border-radius: 14px;
+  background: rgba(5, 10, 87, .48);
+}
+
+.unpaid-attendees-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.unpaid-attendees-heading > div > span {
+  color: #70f0ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+
+.unpaid-attendees-heading h3 { margin: 3px 0 0; font-size: 16px; }
+.unpaid-attendees-heading > span { color: rgba(255,255,255,.55); font-size: 11px; }
+.unpaid-attendees ul { overflow: hidden; margin: 0; padding: 0; border-top: 1px solid rgba(255,255,255,.1); list-style: none; }
+.unpaid-attendees li { border-bottom: 1px solid rgba(255,255,255,.1); }
+.unpaid-attendees li:last-child { border-bottom: 0; }
+.unpaid-attendee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+}
+.unpaid-attendees button {
+  border: 0;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.unpaid-attendee-person {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 4px;
+  background: transparent;
+  text-align: left;
+}
+.unpaid-attendees button:disabled { cursor: default; opacity: .55; }
+.unpaid-badge {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 175, 92, .32);
+  border-radius: 999px;
+  background: rgba(255, 151, 55, .1);
+  color: #ffc178;
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+.unpaid-remove-button,
+.unpaid-add-button {
+  flex: 0 0 auto;
+  min-width: 70px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 11px;
+  text-align: center;
+}
+.unpaid-remove-button { border: 1px solid rgba(255, 116, 151, .4) !important; color: #ff9fba !important; }
+.unpaid-add-button { border: 1px solid rgba(112, 240, 255, .3) !important; color: #70f0ff !important; }
+
+.unpaid-students-list-section { margin-top: 24px; }
+.unpaid-students-list-section > h3 { margin: 0 0 10px; }
+.unpaid-payment-label { color: #ffc178; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.unpaid-attended-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.unpaid-attended-button:disabled { cursor: default; opacity: .55; }
+
+.unpaid-attendees--selected {
+  margin-top: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.unpaid-attendees--selected > h3 {
+  margin: 0 0 10px;
+  color: white;
+  font-size: 16px;
+}
+.unpaid-attendees--selected .unpaid-attendees-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 90px;
+  margin: 0;
+  padding: 0 10px 7px;
+}
+.unpaid-attendees--selected .unpaid-attendees-columns span:nth-child(2),
+.unpaid-attendees--selected .unpaid-attendees-columns span:nth-child(3) { text-align: center; }
+.unpaid-attendees--selected ul {
+  padding: 0 14px;
+  border: 1px solid rgba(112, 240, 255, .22);
+  border-radius: 14px;
+  background: rgba(5, 10, 87, .58);
+}
+.unpaid-attendees--selected .unpaid-attendee-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 90px;
+}
+.unpaid-attendees--selected .unpaid-badge,
+.unpaid-attendees--selected .unpaid-remove-button { justify-self: center; }
+
+.unpaid-attendees--available {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border-color: rgba(255,255,255,.12);
+  background: rgba(5, 10, 87, .22);
+}
+.unpaid-attendees--available .unpaid-attendees-heading { margin-bottom: 5px; }
+.unpaid-attendees--available .unpaid-attendees-heading > div > span { color: rgba(112,240,255,.62); font-size: 8px; }
+.unpaid-attendees--available .unpaid-attendees-heading h3 { color: rgba(255,255,255,.68); font-size: 13px; font-weight: 650; }
+.unpaid-attendees--available .unpaid-attendee-row { min-height: 44px; }
+.unpaid-attendees--available .unpaid-attendee-person { min-height: 42px; color: rgba(255,255,255,.76); font-size: 12px; }
+.unpaid-attendees--available .unpaid-add-button { min-width: 58px; padding: 5px 8px; font-size: 10px; }
+
+@media (max-width: 520px) {
+  .unpaid-attendees--selected .unpaid-attendees-columns,
+  .unpaid-attendees--selected .unpaid-attendee-row {
+    grid-template-columns: minmax(0, 1fr) 74px 72px;
+  }
+}
 
 .replacement-card {
   margin: 18px 0;
   padding: 15px;
-  border: 1px solid rgba(214, 176, 255, 0.28);
+  border: 1px solid rgba(112, 240, 255, 0.24);
   border-radius: 10px;
-  background: rgba(43, 8, 70, 0.7);
+  background: rgba(5, 10, 87, 0.58);
 }
 .replacement-card h3 { margin: 0 0 12px; font-size: 15px; }
 .replacement-status {
@@ -212,7 +410,7 @@ h1 {
   padding: 11px;
   border: 0;
   border-radius: 7px;
-  background: #7b2cbf;
+  background: linear-gradient(105deg, #27c7db, #7478e9 55%, #dc1b9f);
   color: white;
   font-weight: 700;
   cursor: pointer;

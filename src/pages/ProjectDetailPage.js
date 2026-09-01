@@ -501,11 +501,7 @@ function ProjectDetailPage() {
     studentsError ? `Students: ${getErrorMessage(studentsError)}` : '',
   ].filter(Boolean).join(' · ');
   const loadedMessage = projectDataLoadedAt
-    ? `Updated ${new Date(projectDataLoadedAt).toLocaleString()}${
-        studentsLastLoadedAt
-          ? ` · Students ${new Date(studentsLastLoadedAt).toLocaleString()}`
-          : ''
-      }`
+    ? new Date(Math.max(projectDataLoadedAt, studentsLastLoadedAt || 0)).toLocaleString()
     : 'Project roster and payments have not been loaded yet.';
 
   if (!isStaff) {

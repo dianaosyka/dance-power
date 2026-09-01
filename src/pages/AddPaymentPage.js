@@ -28,6 +28,7 @@ import {
   PROJECT_PAYMENT_PART_LABELS,
 } from '../utils/projectPaymentUtils';
 import RefreshStatus from '../components/RefreshStatus';
+import GradientActionButton from '../components/GradientActionButton';
 import './AddPaymentPage.css';
 
 function AddPaymentPage() {
@@ -112,6 +113,8 @@ function AddPaymentPage() {
   const sortedGroups = groups
     .filter(group => group.hidden !== true)
     .sort((b, a) => a.name.localeCompare(b.name));
+  const openPaymentGroups = sortedGroups.filter(group => String(group.type || '').toUpperCase() === 'OPEN');
+  const closedPaymentGroups = sortedGroups.filter(group => String(group.type || '').toUpperCase() !== 'OPEN');
   const sortedProjects = projects
     .filter(project => project.hidden !== true)
     .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
@@ -825,15 +828,25 @@ function AddPaymentPage() {
           <div className={`form-row ${selectedGroups.length > 0 ? 'required-filled' : 'required-empty'}`}>
             <label>GROUPS:</label>
             <div className="group-box" aria-invalid={Boolean(errors.groups)}>
-              {sortedGroups.map(group => (
-                <label key={group.id} className="group-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedGroups.includes(group.id)}
-                    onChange={() => toggleGroup(group.id)}
-                  />
-                  {group.name}
-                </label>
+              {[
+                ['OPEN CLASSES', openPaymentGroups],
+                ['CLOSED GROUPS', closedPaymentGroups],
+              ].map(([heading, items]) => items.length > 0 && (
+                <section className="payment-group-section" key={heading}>
+                  <h3>{heading}</h3>
+                  <div className="payment-group-options">
+                    {items.map(group => (
+                      <label key={group.id} className="group-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroups.includes(group.id)}
+                          onChange={() => toggleGroup(group.id)}
+                        />
+                        {group.name}
+                      </label>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           </div>
@@ -855,8 +868,9 @@ function AddPaymentPage() {
         </>
       ) : null}
 
-      <button
-        className="confirm-button"
+      <GradientActionButton
+        wide
+        icon={isSubmitting || studentsLoading ? '…' : '+'}
         onClick={handleSubmit}
         disabled={
           isSubmitting ||
@@ -876,8 +890,8 @@ function AddPaymentPage() {
               : 'Save payment'
         }
       >
-        {isSubmitting ? 'Saving…' : studentsLoading ? 'Loading…' : '✅'}
-      </button>
+        {isSubmitting ? 'SAVING…' : studentsLoading ? 'LOADING…' : 'ADD PAYMENT'}
+      </GradientActionButton>
     </div>
   );
 }

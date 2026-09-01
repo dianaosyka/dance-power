@@ -20,6 +20,9 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import WorkshopsPage from './pages/WorkshopsPage';
 import WorkshopDetailPage from './pages/WorkshopDetailPage';
 import CreateWorkshopPage from './pages/CreateWorkshopPage';
+import GroupDetailsPage from './pages/GroupDetailsPage';
+import PageBackButton from './components/PageBackButton';
+import './theme.css';
 
 function AppRoutes() {
   const { user } = useUser();
@@ -35,7 +38,9 @@ function AppRoutes() {
   const isStaff = user.role === 'admin' || user.role === 'coach';
 
   return (
-    <Routes>
+    <>
+      <PageBackButton />
+      <Routes>
       <Route
         path="/"
         element={
@@ -53,6 +58,10 @@ function AppRoutes() {
           : <Navigate to="/" replace />}
       />
       <Route path="/group/:groupId" element={<GroupClassesPage />} />
+      <Route
+        path="/group/:groupId/details"
+        element={isStaff ? <GroupDetailsPage /> : <Navigate to="/" replace />}
+      />
       <Route path="/student/:studentId" element={<StudentDetailPage />} />
       <Route path="/group/:groupId/class/:date" element={<GroupClassDetailPage />} />
       <Route path="/payment-history" element={<PaymentHistoryPage />} />
@@ -76,7 +85,8 @@ function AppRoutes() {
       <Route path="/workshop/:workshopId" element={isStaff ? <WorkshopDetailPage /> : <Navigate to="/" replace />} />
       <Route path="/create-workshop" element={user.role === 'admin' ? <CreateWorkshopPage /> : <Navigate to="/workshops" replace />} />
       <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

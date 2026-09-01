@@ -6,6 +6,11 @@ import RefreshStatus from '../components/RefreshStatus';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
+function initials(name) {
+  return String(name || '?').trim().split(/\s+/).slice(0, 2)
+    .map(part => part[0]).join('').toUpperCase();
+}
+
 function StudentsListPage() {
   const {
     students,
@@ -23,7 +28,10 @@ function StudentsListPage() {
   const navigate = useNavigate();
 
   const filteredStudents = students.filter(student => {
-    const matchesGroup = selectedGroup ? (student.groups || []).includes(selectedGroup) : true;
+    const selectedGroupRecord = groups.find(group => group.id === selectedGroup);
+    const matchesGroup = selectedGroup
+      ? (selectedGroupRecord?.signedStudents || []).includes(student.id)
+      : true;
     const matchesSearch = String(student.name || '')
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
@@ -56,30 +64,44 @@ function StudentsListPage() {
           refreshLabel="Refresh students"
         />
 
-        <select
-          className="group-select"
-          value={selectedGroup}
-          onChange={e => setSelectedGroup(e.target.value)}
-        >
-          <option value="">GROUP</option>
-          {groups.map(group => (
-            <option key={group.id} value={group.id}>
-              {group.name.toUpperCase()}
-            </option>
-          ))}
-        </select>
+        <div className="students-filters">
+          <label className="students-filter-field">
+            <span>GROUP</span>
+            <select
+              className="group-select"
+              value={selectedGroup}
+              onChange={e => setSelectedGroup(e.target.value)}
+            >
+              <option value="">All groups</option>
+              {groups.map(group => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <input
-          type="text"
-          placeholder="Search student..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="input"
-          style={{ width: '95%' }}
-        />
+          <label className="students-filter-field students-search-field">
+            <span>SEARCH</span>
+            <div>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
+              <input
+                type="text"
+                placeholder="Search by name…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="input"
+              />
+              {searchTerm && <button className="search-clear-button" type="button" onClick={() => setSearchTerm('')} aria-label="Clear search" />}
+            </div>
+          </label>
+        </div>
 
         <div className="people-header">
-          <h3 className="people-title">PEOPLE</h3>
+          <div>
+            <p>DIRECTORY</p>
+            <h3 className="people-title">PEOPLE <span>{filteredStudents.length}</span></h3>
+          </div>
           {user?.role === 'admin' && (
             <button
               className="add-student-button"
@@ -91,16 +113,9 @@ function StudentsListPage() {
                   : 'Add student'
               }
             >
-              +
+              <span aria-hidden="true">+</span> Add student
             </button>
           )}
-        </div>
-
-        <br />
-
-        <div className="students-header">
-          <span>PERSON</span>
-          <span>CHOOSE</span>
         </div>
 
         <ul className="students-list">
@@ -118,8 +133,9 @@ function StudentsListPage() {
               className="student-item"
               onClick={() => navigate(`/student/${student.id}`)}
             >
-              <span>{student.name.toUpperCase().slice(0, 30)}</span>
-              <span className="arrow">{'>'}</span>
+              <span className="students-list-avatar" aria-hidden="true">{initials(student.name)}</span>
+              <span className="students-list-name">{student.name.toUpperCase().slice(0, 40)}</span>
+              <span className="arrow">›</span>
             </li>
           ))}
         </ul>
@@ -127,7 +143,6 @@ function StudentsListPage() {
 
       {showModal && (
         <AddStudentModal
-          groupId={selectedGroup}
           onClose={() => setShowModal(false)}
         />
       )}

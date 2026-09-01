@@ -2,7 +2,7 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
   width: 100%;
   margin: 8px 0 14px;
@@ -17,14 +17,16 @@
 }
 
 .refresh-status__message {
+  flex: 1 1 auto;
   min-width: 0;
-  text-align: right;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
 .refresh-status__button {
   display: inline-flex;
   flex: 0 0 auto;
+  margin-left: auto;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -37,6 +39,14 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.refresh-status__timestamp {
+  padding-right: 9px;
+  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.68);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .refresh-status__button:hover:not(:disabled) {

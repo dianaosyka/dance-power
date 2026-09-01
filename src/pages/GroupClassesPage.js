@@ -526,36 +526,40 @@ function GroupClassesPage() {
 
   return (
     <div className="group-page">
-      <h2 className="group-title">{group?.name?.toUpperCase()}</h2>
-      <p className="group-schedule">{group?.schedule || 'FRIDAY 20:00'}</p>
+      <header className="group-classes-hero">
+        <p className="group-classes-eyebrow">Group classes</p>
+        <h2 className="group-title">{group?.name?.toUpperCase()}</h2>
+        <p className="group-schedule">{group?.schedule || 'FRIDAY 20:00'}</p>
+      </header>
 
-      {(user?.role === 'admin' || user?.role === 'coach') && (
-        <>
-          <button className="students-button" onClick={() => navigate('/students')}>
-            STUDENTS LIST
-          </button>
-          <button
-            className="add-cancel-button"
-            onClick={() => openAddClassForm()}
-            style={{ backgroundColor: 'green', color: 'white', marginBottom: 10 }}
-          >
-            ➕ ADD CLASS
-          </button>
-        </>
-      )}
+      <div className="group-classes-toolbar">
+        {(user?.role === 'admin' || user?.role === 'coach') && (
+          <div className="group-classes-admin-actions">
+            <button className="students-button" onClick={() => navigate(`/group/${groupId}/details`)}>
+              GROUP DETAILS &amp; SIGNED STUDENTS
+            </button>
+            <button
+              className="add-cancel-button add-class-button"
+              onClick={() => openAddClassForm()}
+            >
+              <span aria-hidden="true">＋</span> ADD CLASS
+            </button>
+          </div>
+        )}
 
-      <button className="add-cancel-button" onClick={toggleFutureDates}>
-        {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
-      </button>
-      <RefreshStatus
-        message={pastClassesCheckedAt
-          ? `Last updated: ${new Date(pastClassesCheckedAt).toLocaleString()}`
-          : 'Not updated yet'}
-        error={pastClassesError}
-        loading={pastClassesLoading}
-        onRefresh={handleRefreshPastClasses}
-        refreshLabel="Refresh classes"
-      />
+        <RefreshStatus
+          message={pastClassesCheckedAt
+            ? `Last updated: ${new Date(pastClassesCheckedAt).toLocaleString()}`
+            : 'Not updated yet'}
+          error={pastClassesError}
+          loading={pastClassesLoading}
+          onRefresh={handleRefreshPastClasses}
+          refreshLabel="Refresh classes"
+        />
+        <button className="add-cancel-button future-classes-button" onClick={toggleFutureDates}>
+          {showFuture ? 'Hide Future Classes' : 'See Future Classes'}
+        </button>
+      </div>
 
       {warnings.length > 0 && (user?.role === 'admin' || user?.role === 'coach') && (
         <section className="class-warnings" aria-label="Class warnings">
@@ -593,9 +597,9 @@ function GroupClassesPage() {
         <>
           <h3 className="classes-heading">FUTURE CLASSES</h3>
           <div className="classes-header">
-            <span>CLASSES DATE</span>
-            <span>IS COMPLETED</span>
-            <span>SEE MORE</span>
+            <span>DATE</span>
+            <span>STATUS</span>
+            <span>DETAILS</span>
           </div>
           <ul className="class-list">
             {futureDates.map(date => (
@@ -617,14 +621,14 @@ function GroupClassesPage() {
 
       <h3 className="classes-heading">CLASSES</h3>
       <div className="classes-header">
-        <span>CLASSES DATE</span>
-        <span>IS COMPLETED</span>
-        <span>SEE MORE</span>
+        <span>DATE</span>
+        <span>STATUS</span>
+        <span>DETAILS</span>
       </div>
 
       <ul className="class-list">
         {pastClassesLoaded && pastDates.length === 0 && (
-          <li className="class-item">No recorded classes.</li>
+          <li className="class-item class-item--empty">No recorded classes.</li>
         )}
         {pastDates.map(past => (
           <li key={past.date} className="class-item">
@@ -658,7 +662,6 @@ function GroupClassesPage() {
           </li>
         ))}
       </ul>
-      <br></br><br></br>
       {user?.role === 'admin' && (
         <button
           className="delete-group-button"

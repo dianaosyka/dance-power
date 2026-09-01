@@ -68,12 +68,14 @@ function staffRouteRequirements(pathname, role) {
   const isPaymentHistory = normalizedPath === '/payment-history';
   const isProjectDetail = /^\/project\/[^/]+$/.test(normalizedPath);
   const isWorkshopDetail = /^\/workshop\/[^/]+$/.test(normalizedPath);
+  const isGroupDetails = /^\/group\/[^/]+\/details$/.test(normalizedPath);
 
   return {
     students:
       normalizedPath === '/students' ||
       (normalizedPath === '/add-payment' && (role === 'admin' || role === 'coach')) ||
       isClassDetail ||
+      isGroupDetails ||
       isPaymentHistory ||
       isProjectDetail ||
       isWorkshopDetail,

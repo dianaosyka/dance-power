@@ -119,7 +119,7 @@ describe('AddPaymentPage', () => {
     fireEvent.change(screen.getByText('REASON:').parentElement.querySelector('select'), {
       target: { value: 'private_lessons' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '✅' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ADD PAYMENT' }));
 
     await waitFor(() => {
       expect(mockBatch.commit).toHaveBeenCalledTimes(1);
@@ -174,7 +174,7 @@ describe('AddPaymentPage', () => {
       target: { value: '1' },
     });
     fireEvent.click(screen.getByText('Group A').closest('label').querySelector('input'));
-    fireEvent.click(screen.getByRole('button', { name: '✅' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ADD PAYMENT' }));
 
     await waitFor(() => expect(mockBatch.commit).toHaveBeenCalledTimes(1));
 
@@ -248,7 +248,7 @@ describe('AddPaymentPage', () => {
     fireEvent.change(document.querySelector('input[type="date"]'), {
       target: { value: '2026-08-30' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '✅' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ADD PAYMENT' }));
 
     await waitFor(() => expect(mockRunTransaction).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mockTransaction.set).toHaveBeenCalledTimes(1));
@@ -301,7 +301,7 @@ describe('AddPaymentPage', () => {
     expect(amountInput).not.toHaveAttribute('readonly');
     fireEvent.change(amountInput, { target: { value: '65' } });
     fireEvent.change(document.querySelector('input[type="date"]'), { target: { value: '2026-08-31' } });
-    fireEvent.click(screen.getByRole('button', { name: '✅' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ADD PAYMENT' }));
 
     await waitFor(() => expect(mockTransaction.set).toHaveBeenCalledWith(
       { path: 'workshops/workshop-1/payments/student-1' },

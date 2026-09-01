@@ -54,7 +54,7 @@ function CreateGroupPage() {
   const [coachId, setCoachId] = useState('');
   const [hidden, setHidden] = useState(false);
 
-  const [regularType, setRegularType] = useState('PERMANENT');
+  const [regularType, setRegularType] = useState('CLOSED');
   const [regularDay, setRegularDay] = useState('1');
   const [regularTime, setRegularTime] = useState('');
 
@@ -143,7 +143,7 @@ function CreateGroupPage() {
     if (!coachesLoaded) nextErrors.coach = 'Wait for coaches to finish loading.';
 
     if (kind === 'regular') {
-      if (!['PERMANENT', 'OPEN'].includes(regularType)) {
+      if (!['CLOSED', 'OPEN'].includes(regularType)) {
         nextErrors.type = 'Select a valid group type.';
       }
       if (!/^[0-6]$/.test(regularDay)) {
@@ -195,6 +195,7 @@ function CreateGroupPage() {
           time: regularTime,
           schedule: `${WEEKDAYS[dayOfWeek]} ${regularTime}`,
           coach: coachId,
+          signedStudents: [],
           hidden,
           createdAt,
           createdBy,
@@ -337,7 +338,7 @@ function CreateGroupPage() {
                   }}
                   disabled={isSubmitting}
                 >
-                  <option value="PERMANENT">Permanent</option>
+                  <option value="CLOSED">Closed</option>
                   <option value="OPEN">Open</option>
                 </select>
                 {errors.type && <small role="alert">{errors.type}</small>}

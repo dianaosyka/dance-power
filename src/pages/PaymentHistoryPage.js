@@ -24,6 +24,7 @@ import {
   loadWorkshopPaymentHistory,
 } from '../utils/workshopPaymentsCache';
 import RefreshStatus from '../components/RefreshStatus';
+import GradientActionButton from '../components/GradientActionButton';
 import './PaymentHistoryPage.css';
 
 const COMPACT_MONTHS = [
@@ -350,19 +351,19 @@ function PaymentHistoryPage() {
     });
   };
 
-  const studentsLastLoadedText = studentsLastLoadedAt
-    ? new Date(studentsLastLoadedAt).toLocaleString()
+  const latestLoadedAt = [
+    studentsLastLoadedAt,
+    paymentsLastLoadedAt,
+    otherPaymentsLastLoadedAt,
+    projectPaymentsLastLoadedAt,
+    workshopPaymentsLastLoadedAt,
+  ].reduce((latest, value) => {
+    const timestamp = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+  const lastUpdatedText = latestLoadedAt
+    ? new Date(latestLoadedAt).toLocaleString()
     : 'not updated yet';
-  const paymentsLastLoadedText = paymentsLastLoadedAt
-    ? new Date(paymentsLastLoadedAt).toLocaleString()
-    : 'not updated yet';
-  const otherPaymentsLastLoadedText = otherPaymentsLastLoadedAt
-    ? new Date(otherPaymentsLastLoadedAt).toLocaleString()
-    : 'not updated yet';
-  const projectPaymentsLastLoadedText = projectPaymentsLastLoadedAt
-    ? new Date(projectPaymentsLastLoadedAt).toLocaleString()
-    : 'not updated yet';
-  const workshopPaymentsLastLoadedText = workshopPaymentsLastLoadedAt ? new Date(workshopPaymentsLastLoadedAt).toLocaleString() : 'not updated yet';
   const otherPaymentsReady = otherPaymentsLoaded || Boolean(otherPaymentsError);
   const projectPaymentsReady = projectPaymentsLoaded || Boolean(projectPaymentsError);
   const workshopPaymentsReady = workshopPaymentsLoaded || Boolean(workshopPaymentsError);
@@ -387,23 +388,25 @@ function PaymentHistoryPage() {
   return (
     <div className="payment-history-page">
       <div className="history-header">
-        <h2 className="history-title">💳 PAYMENT HISTORY</h2>
+        <div className="history-heading-copy">
+          <p>FINANCE</p>
+          <h2 className="history-title">PAYMENTS</h2>
+        </div>
         {canAddPayment && (
-          <button
+          <GradientActionButton
             type="button"
-            className="history-add-payment"
+            wide
             aria-label="Add payment"
             title="Add payment"
             onClick={() => navigate('/add-payment')}
           >
-            <span className="history-add-payment-icon" aria-hidden="true">+</span>
-            <span>ADD PAYMENT</span>
-          </button>
+            ADD PAYMENT
+          </GradientActionButton>
         )}
       </div>
       <RefreshStatus
         message={dataLoaded
-          ? `Last updated — Students: ${studentsLastLoadedText}; Group payments: ${paymentsLastLoadedText}; Project payments: ${projectPaymentsLastLoadedText}; Workshop payments: ${workshopPaymentsLastLoadedText}; Other payments: ${otherPaymentsLastLoadedText}`
+          ? `Last updated: ${lastUpdatedText}`
           : 'Not updated yet'}
         error={(studentsError || paymentsError || otherPaymentsError)
           ? [
@@ -419,7 +422,6 @@ function PaymentHistoryPage() {
         refreshLabel="Refresh data"
       />
       <div className="history-sort">
-        <span className="history-sort-label">Sort by</span>
         <div className="history-sort-tabs" role="tablist" aria-label="Sort payments by">
           {[
             ['timestamp', 'Timestamp'],

@@ -281,13 +281,20 @@ function SalaryPage() {
         calculationOtherPayments,
         runMonth
       );
+      const monthlyOtherPayments = getOtherPaymentsForMonth(
+        calculationOtherPayments,
+        runMonth
+      );
+      const hallRentEarnedTotal = monthlyOtherPayments
+        .filter(payment => payment.reason === 'hall_rent')
+        .reduce((total, payment) => total + Number(payment.amount), 0);
+      const privateLessonsEarnedTotal = monthlyOtherPayments
+        .filter(payment => payment.reason === 'private_lessons')
+        .reduce((total, payment) => total + Number(payment.amount), 0);
       const studentNamesById = new Map(
         calculationStudents.map(student => [student.id, student.name || 'Unknown'])
       );
-      const otherPaymentRows = getOtherPaymentsForMonth(
-        calculationOtherPayments,
-        runMonth
-      )
+      const otherPaymentRows = monthlyOtherPayments
         .map(payment => ({
           id: payment.id,
           studentId: payment.studentId,
@@ -358,6 +365,10 @@ function SalaryPage() {
           );
           const classCoachesTotal = coachIds.length * coachPay;
           const classEarned = classGross - rent - classCoachesTotal;
+          const unpaidStudents = (Array.isArray(classData?.unpaidAttendees) ? classData.unpaidAttendees : [])
+            .map(studentId => calculationStudents.find(student => student.id === studentId))
+            .filter(Boolean)
+            .map(student => ({ id: student.id, name: student.name || student.email || student.id }));
 
           grossTotal += classGross;
           rentTotal += rent;
@@ -387,6 +398,7 @@ function SalaryPage() {
             groupName: group.name,
             date,
             comment: typeof classData?.comment === 'string' ? classData.comment.trim() : '',
+            unpaidStudents,
             gross: classGross,
             rent,
             coaches: classCoachesTotal,
@@ -537,6 +549,8 @@ function SalaryPage() {
         workshopEarnedTotal,
         workshopSalaryRows,
         otherEarnedTotal: otherPaymentsTotal,
+        hallRentEarnedTotal,
+        privateLessonsEarnedTotal,
         otherPaymentsTotal,
         otherPaymentRows,
         rentTotal,
@@ -688,10 +702,16 @@ function SalaryPage() {
 
   return (
     <div className="salary-page">
-      <button className="salary-back-button" onClick={() => navigate('/groups')}>
-        Back
-      </button>
-      <h2 className="salary-title">SALARY</h2>
+      <header className="salary-page-header">
+        <button className="salary-back-button" onClick={() => navigate('/groups')} aria-label="Back to groups">
+          ←
+        </button>
+        <div>
+          <p>Finance</p>
+          <h2 className="salary-title">SALARY</h2>
+        </div>
+        <span aria-hidden="true" />
+      </header>
 
       <div className="salary-controls">
         <label className="salary-label" htmlFor="salary-month">
@@ -723,31 +743,35 @@ function SalaryPage() {
         <>
           {isAdmin ? (
             <div className="salary-summary">
-              <div>
+              <div className={`salary-kpi salary-kpi--net ${summary.earnedTotal < 0 ? 'is-negative' : 'is-positive'}`}>
                 <span>All earned</span>
                 <strong>{summary.earnedTotal.toFixed(2)}€</strong>
               </div>
-              <div>
-                <span>Earned from classes</span>
-                <strong>{Number(summary.classesEarnedTotal || 0).toFixed(2)}€</strong>
-              </div>
-              <div>
-                <span>Earned from workshops</span>
-                <strong>{Number(summary.workshopEarnedTotal || 0).toFixed(2)}€</strong>
-              </div>
-              <div>
-                <span>Earned from other</span>
-                <strong>{Number(summary.otherEarnedTotal || 0).toFixed(2)}€</strong>
-              </div>
-              <div>
+              <div className="salary-kpi salary-kpi--gross">
                 <span>Gross</span>
                 <strong>{summary.grossTotal.toFixed(2)}€</strong>
               </div>
-              <div>
+              <div className="salary-kpi salary-kpi--standard">
+                <span>Earned from classes</span>
+                <strong>{Number(summary.classesEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div className="salary-kpi salary-kpi--standard">
+                <span>Earned from workshops</span>
+                <strong>{Number(summary.workshopEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div className="salary-kpi salary-kpi--standard">
+                <span>Hall rent income</span>
+                <strong>{Number(summary.hallRentEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div className="salary-kpi salary-kpi--standard">
+                <span>Private lessons</span>
+                <strong>{Number(summary.privateLessonsEarnedTotal || 0).toFixed(2)}€</strong>
+              </div>
+              <div className="salary-kpi salary-kpi--standard">
                 <span>For coaches</span>
                 <strong>{summary.coachesTotal.toFixed(2)}€</strong>
               </div>
-              <div>
+              <div className="salary-kpi salary-kpi--standard">
                 <span>Rent</span>
                 <strong>{summary.rentTotal.toFixed(2)}€</strong>
               </div>
@@ -795,7 +819,7 @@ function SalaryPage() {
               {showLessonMoney ? 'Hide money' : 'Show money'}
             </button>
           </div>
-          <ul className="salary-list">
+          <ul className="salary-list salary-breakdown-list">
             {summary.lessonsByCoach.length === 0 ? (
               <li className="salary-row">No lessons or workshop earnings in this month.</li>
             ) : (
@@ -806,7 +830,7 @@ function SalaryPage() {
                     {coach.lessons.map(row => (
                       <li
                         key={`${coach.id}-${row.id}`}
-                        className={`salary-lesson-row${row.comment ? ' has-urgent-comment' : ''}`}
+                        className={`salary-lesson-row${row.unpaidStudents?.length ? ' has-incomplete-payment' : ''}`}
                         role="button"
                         tabIndex={0}
                         onClick={() => navigate(row.projectId
@@ -835,9 +859,15 @@ function SalaryPage() {
                             )}
                           </div>
                         </div>
-                        {row.comment && (
-                          <div className="salary-lesson-comment">
+                        {row.unpaidStudents?.length > 0 && (
+                          <div className="salary-lesson-comment salary-lesson-comment--unpaid">
                             <span className="salary-lesson-comment-label">Incomplete payment</span>
+                            <strong>{row.unpaidStudents.map(student => student.name).join(', ')}</strong>
+                          </div>
+                        )}
+                        {row.comment && (
+                          <div className="salary-lesson-comment salary-lesson-comment--note">
+                            <span className="salary-lesson-comment-label">Comment</span>
                             <strong>{row.comment}</strong>
                           </div>
                         )}

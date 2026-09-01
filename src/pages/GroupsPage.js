@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import CoachTasksPage from './CoachTasksPage';
+import GradientActionButton from '../components/GradientActionButton';
 import './GroupsPage.css';
 
 function GroupsPage() {
@@ -40,9 +41,32 @@ function GroupsPage() {
     navigate('/login');
   };
 
-  const visibleGroups = groups
-    .filter(group => showHiddenGroups || group.hidden !== true)
-    .sort((b, a) => a.name.localeCompare(b.name));
+  const sortGroups = list => [...list].sort((second, first) => first.name.localeCompare(second.name));
+  const activeGroups = groups.filter(group => group.hidden !== true);
+  const openGroups = sortGroups(activeGroups.filter(group => String(group.type || '').toUpperCase() === 'OPEN'));
+  const closedGroups = sortGroups(activeGroups.filter(group => String(group.type || '').toUpperCase() !== 'OPEN'));
+  const hiddenGroups = sortGroups(groups.filter(group => group.hidden === true));
+
+  const renderGroupSection = (title, items, variant = '') => (
+    <section className={`group-list-section ${variant ? `group-list-section--${variant}` : ''}`}>
+      <div className="group-list-heading">
+        <h3>{title}</h3>
+        <span>{items.length}</span>
+      </div>
+      <ul className="group-list">
+        {items.map(group => (
+          <li
+            key={group.id}
+            className="group-item"
+            onClick={() => navigate(`/group/${group.id}`)}
+          >
+            <span>{variant === 'hidden' && <span className="group-lock" aria-hidden="true">◌</span>}{group.name.toUpperCase()}</span>
+            <span className="arrow">{'>'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 
   return (
     <div className="page">
@@ -70,7 +94,7 @@ function GroupsPage() {
                 )}
                 <button type="button" onClick={() => goTo('/students')}>Students list</button>
                 <button type="button" onClick={() => goTo('/schedule')}>Schedule</button>
-                <button type="button" onClick={() => goTo('/payment-history')}>Payment history</button>
+                <button type="button" onClick={() => goTo('/payment-history')}>History</button>
                 {(user?.role === 'admin' || user?.role === 'coach') && (
                   <button type="button" onClick={() => goTo('/salary')}>Salary</button>
                 )}
@@ -93,39 +117,28 @@ function GroupsPage() {
 
         {(user?.role === 'admin' || user?.role === 'coach') && (
           <div className="add-button-container">
-            <button
+            <GradientActionButton
               type="button"
-              className="add-button"
               aria-label="Add payment"
               title="Add payment"
               onClick={() => navigate('/add-payment')}
             >
-              <span className="add-button-icon" aria-hidden="true">+</span>
-              <span>ADD PAYMENT</span>
-            </button>
+              ADD PAYMENT
+            </GradientActionButton>
           </div>
         )}
 
-        <ul className="group-list">
-          {visibleGroups.map(group => (
-            <li
-              key={group.id}
-              className="group-item"
-              onClick={() => navigate(`/group/${group.id}`)}
-            >
-              <span>{group.name.toUpperCase()}</span>
-              <span className="arrow">{'>'}</span>
-            </li>
-          ))}
-        </ul>
+        {openGroups.length > 0 && renderGroupSection('OPEN CLASSES', openGroups)}
+        {closedGroups.length > 0 && renderGroupSection('CLOSED GROUPS', closedGroups, 'closed')}
+        {user?.role === 'admin' && showHiddenGroups && hiddenGroups.length > 0 && renderGroupSection('HIDDEN GROUPS', hiddenGroups, 'hidden')}
 
-        {user?.role === 'admin' && (
+        {user?.role === 'admin' && hiddenGroups.length > 0 && (
           <div className="hidden-toggle-container">
             <button
               className="hidden-toggle-button"
               onClick={() => setShowHiddenGroups(current => !current)}
             >
-              {showHiddenGroups ? 'Hide hidden groups' : 'Show hidden groups'}
+              {showHiddenGroups ? 'Hide hidden groups' : `Show hidden groups (${hiddenGroups.length})`}
             </button>
           </div>
         )}

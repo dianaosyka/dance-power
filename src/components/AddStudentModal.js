@@ -3,7 +3,7 @@ import { collection, addDoc /* , serverTimestamp */ } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import './AddStudentModal.css';
 
-function AddStudentModal({ groupId, onClose }) {
+function AddStudentModal({ onClose }) {
   const { db, upsertStudent } = useData();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -28,7 +28,8 @@ function AddStudentModal({ groupId, onClose }) {
       const studentData = {
         name: nameTrim,
         phone: phoneTrim,
-        groups: groupId ? [groupId] : [],
+        // Group enrollment is managed explicitly from Group details.
+        groups: [],
         // createdAt: serverTimestamp(), // optional if you want
       };
       const studentRef = await addDoc(collection(db, 'students'), studentData);

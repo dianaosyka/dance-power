@@ -13,7 +13,7 @@ import { generateProjectSchedule } from '../utils/projectUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './SchedulePage.css';
 
-const DAY_NAMES = ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'];
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
 const CLASS_TRACKING_START = new Date(2026, 5, 1);
 
@@ -81,8 +81,8 @@ function coachNickname(coach) {
 }
 
 function formatLoadedTime(timestamp) {
-  if (!timestamp) return 'Zatiaľ neaktualizované';
-  return `Aktualizované: ${new Date(timestamp).toLocaleString('sk-SK')}`;
+  if (!timestamp) return 'Not updated yet';
+  return `Updated: ${new Date(timestamp).toLocaleString('en-GB')}`;
 }
 
 function SchedulePage() {
@@ -259,7 +259,7 @@ function SchedulePage() {
     } catch (loadError) {
       console.error('Failed to load schedule:', loadError);
       if (loadGeneration.current !== generation) return;
-      setError('Rozvrh sa nepodarilo načítať. Skúste to znova.');
+      setError('The schedule could not be loaded. Please try again.');
     } finally {
       if (loadGeneration.current === generation) setLoading(false);
     }
@@ -355,42 +355,46 @@ function SchedulePage() {
   };
 
   const periodLabel = view === 'month'
-    ? anchor.toLocaleDateString('sk-SK', { month: 'long', year: 'numeric' })
-    : `${visibleDates[0].toLocaleDateString('sk-SK', { day: 'numeric', month: 'short' })} – ${visibleDates[6].toLocaleDateString('sk-SK', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    ? anchor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    : `${visibleDates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${visibleDates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   const todayKey = dateKey(new Date());
 
   return (
     <div className="schedule-page">
       <div className="schedule-shell">
+        <button className="schedule-back-arrow" type="button" onClick={() => navigate('/groups')} aria-label="Back to groups">←</button>
         <RefreshStatus
-          message={rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Zatiaľ neaktualizované'}
+          message={rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Not updated yet'}
           error={error
             ? `${error}${rangeIsLoaded ? ` ${formatLoadedTime(lastLoadedAt)}.` : ''}`
             : projectsError ? `Projects: ${projectsError}` : ''}
           loading={loading}
           onRefresh={() => loadClasses({ force: true })}
-          refreshLabel="Obnoviť rozvrh"
-          loadingLabel="Obnovujem…"
+          refreshLabel="Refresh schedule"
+          loadingLabel="Refreshing…"
         />
 
-        <div className="schedule-view-toggle" aria-label="Zobrazenie kalendára">
-          <button type="button" className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Týždeň</button>
-          <button type="button" className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Mesiac</button>
+        <div className="schedule-view-toggle" aria-label="Calendar view">
+          <button type="button" className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Week</button>
+          <button type="button" className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Month</button>
         </div>
 
         <header className="schedule-header">
-          <button type="button" onClick={() => navigate('/groups')} aria-label="Späť na skupiny">Späť</button>
+          <span className="schedule-header-spacer" aria-hidden="true" />
           <div>
             <p>DancePower</p>
-            <h1>ROZVRH</h1>
+            <h1>SCHEDULE</h1>
           </div>
-          <button type="button" onClick={() => setAnchor(new Date())}>Dnes</button>
+          <span className="schedule-header-spacer" aria-hidden="true" />
         </header>
 
         <div className="month-switcher">
-          <button type="button" onClick={() => changePeriod(-1)} aria-label="Predchádzajúce obdobie">‹</button>
-          <h2>{periodLabel}</h2>
-          <button type="button" onClick={() => changePeriod(1)} aria-label="Nasledujúce obdobie">›</button>
+          <button type="button" onClick={() => changePeriod(-1)} aria-label="Previous period">‹</button>
+          <div className="month-switcher-center">
+            <button type="button" className="month-today-button" onClick={() => setAnchor(new Date())}>Today</button>
+            <h2>{periodLabel}</h2>
+          </div>
+          <button type="button" onClick={() => changePeriod(1)} aria-label="Next period">›</button>
         </div>
 
         {view === 'month' && (
@@ -401,7 +405,7 @@ function SchedulePage() {
 
         {!rangeIsLoaded ? (
           <p className="schedule-status">
-            {error || 'Načítavam rozvrh…'}
+            {error || 'Loading schedule…'}
           </p>
         ) : (
           <div className={`schedule-grid schedule-grid--${view}`}>
@@ -417,16 +421,16 @@ function SchedulePage() {
                         const ids = item.replacement?.status === 'confirmed'
                           ? [item.replacement.suggestedCoach]
                           : coachIds(item, item.group);
-                        const names = ids.length ? ids.map(id => coachNicknames.get(id) || id).join(', ') : 'Lektor bude doplnený';
+                        const names = ids.length ? ids.map(id => coachNicknames.get(id) || id).join(', ') : 'Coach to be confirmed';
                         const replacementName = item.replacement
                           ? coachNicknames.get(item.replacement.suggestedCoach) || item.replacement.suggestedCoach
                           : '';
                         const replacementLabel = item.replacement?.status === 'confirmed'
-                          ? `Zastupovanie potvrdené · ${replacementName}`
+                          ? `Replacement confirmed · ${replacementName}`
                           : item.replacement?.status === 'denied'
-                            ? `Zastupovanie zamietnuté · ${replacementName}`
+                            ? `Replacement denied · ${replacementName}`
                             : item.replacement
-                              ? `Zastupovanie čaká · ${replacementName}`
+                              ? `Replacement pending · ${replacementName}`
                               : '';
                         return (
                           <button
@@ -441,11 +445,11 @@ function SchedulePage() {
                             <strong>{classTime(item)}</strong>
                             <span>{item.group.name}</span>
                             <small>{item.isProject
-                              ? `Projekt · ${names}`
+                              ? `Project · ${names}`
                               : item.canceled
-                                ? 'Zrušené'
+                                ? 'Canceled'
                                 : item.isMissing
-                                  ? `⚠ Hodina nebola pridaná · ${names}`
+                                  ? `⚠ Class was not added · ${names}`
                                   : names}</small>
                             {replacementLabel && <em>{replacementLabel}</em>}
                           </button>
@@ -460,13 +464,13 @@ function SchedulePage() {
         )}
 
         <div className="schedule-legend">
-          <span><i className="legend-recorded" /> Uskutočnená hodina</span>
-          <span><i className="legend-project" /> Projektová hodina</span>
-          <span><i className="legend-future" /> Nadchádzajúca hodina</span>
-          <span><i className="legend-missing" /> Hodina nebola pridaná</span>
-          <span><i className="legend-pending" /> Zastupovanie čaká</span>
-          <span><i className="legend-confirmed" /> Zastupovanie potvrdené</span>
-          <span><i className="legend-denied" /> Zastupovanie zamietnuté</span>
+          <span><i className="legend-recorded" /> Completed class</span>
+          <span><i className="legend-project" /> Project class</span>
+          <span><i className="legend-future" /> Upcoming class</span>
+          <span><i className="legend-missing" /> Class was not added</span>
+          <span><i className="legend-pending" /> Replacement pending</span>
+          <span><i className="legend-confirmed" /> Replacement confirmed</span>
+          <span><i className="legend-denied" /> Replacement denied</span>
         </div>
       </div>
     </div>

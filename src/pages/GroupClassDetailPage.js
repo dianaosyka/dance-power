@@ -90,10 +90,13 @@ function GroupClassDetailPage() {
   const [savedComment, setSavedComment] = useState('');
   const [savingComment, setSavingComment] = useState(false);
   const [attendanceCompleted, setAttendanceCompleted] = useState(false);
+  const [unpaidAttendeeIds, setUnpaidAttendeeIds] = useState([]);
+  const [savingUnpaidAttendeeId, setSavingUnpaidAttendeeId] = useState('');
   const [savingAttendanceStatus, setSavingAttendanceStatus] = useState(false);
   const [replacement, setReplacement] = useState(null);
   const [replacementCoachId, setReplacementCoachId] = useState('');
   const [savingReplacement, setSavingReplacement] = useState(false);
+  const [savingClassCoach, setSavingClassCoach] = useState(false);
   const [refreshingData, setRefreshingData] = useState(false);
   const [classStatusLoading, setClassStatusLoading] = useState(true);
   const [classStatusError, setClassStatusError] = useState('');
@@ -120,6 +123,7 @@ function GroupClassDetailPage() {
         data?.attendanceCompleted === true ||
         (!hasAttendanceStatus && data?.canceled !== true && isBeforeAttendanceTracking(date))
       );
+      setUnpaidAttendeeIds(Array.isArray(data?.unpaidAttendees) ? data.unpaidAttendees : []);
       const nextComment = typeof data?.comment === 'string' ? data.comment : '';
       setComment(nextComment);
       setSavedComment(nextComment);
@@ -324,7 +328,7 @@ function GroupClassDetailPage() {
       return;
     }
 
-    if (!payments?.length || !students?.length) {
+    if (!students?.length) {
       setSignedUp([]);
       setSignedUpDataKey(routeKey);
       setSignedUpError('');
@@ -336,17 +340,36 @@ function GroupClassDetailPage() {
     setSignedUpError('');
     (async () => {
       try {
-        // get matched signups
-        const matched = await getClassSignedStudentsByPayments({
-          groupId,
-          date,
-          students,
-          payments,
-          groups,
-          user,
-          pastClassesByGroup,
-          loadPastClassDocs,
-        });
+        // Paid students come from payment coverage. Signed students without a
+        // payment are included only after the coach/admin explicitly records
+        // them as an unpaid attendee on this class.
+        const paymentMatches = payments?.length
+          ? await getClassSignedStudentsByPayments({
+              groupId,
+              date,
+              students,
+              payments,
+              groups,
+              user,
+              pastClassesByGroup,
+              loadPastClassDocs,
+            })
+          : [];
+        const paymentByStudentId = new Map(
+          paymentMatches.map(student => [student.id, student])
+        );
+        const enrolledIds = new Set([
+          ...paymentMatches.map(student => student.id),
+          ...unpaidAttendeeIds,
+        ]);
+        const matched = students
+          .filter(student => enrolledIds.has(student.id))
+          .map(student => ({
+            ...student,
+            amount: Number(paymentByStudentId.get(student.id)?.amount || 0),
+            hasPaymentForClass: paymentByStudentId.has(student.id),
+          }))
+          .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
 
         if (!active) return;
         setSignedUp(matched);
@@ -378,7 +401,7 @@ function GroupClassDetailPage() {
     return () => {
       active = false;
     };
-  }, [classDataKey, routeKey, group, groupId, date, payments, students, studentsLoaded, paymentsLoaded, user, groups, rent, coachesThisClass, pastClassesByGroup, loadPastClassDocs]);
+  }, [classDataKey, routeKey, group, groupId, date, payments, students, studentsLoaded, paymentsLoaded, user, groups, rent, coachesThisClass, unpaidAttendeeIds, pastClassesByGroup, loadPastClassDocs]);
 
   const handleRefreshData = async () => {
     if (refreshingData || studentsLoading || paymentsLoading) return;
@@ -633,6 +656,71 @@ function GroupClassDetailPage() {
     }
   };
 
+  const handlePastClassCoachChange = async (coachId) => {
+    if (
+      isFutureDate(date) ||
+      !classExists ||
+      !coachId ||
+      savingClassCoach ||
+      (user?.role !== 'admin' && coachId !== user?.id)
+    ) return;
+
+    setSavingClassCoach(true);
+    try {
+      const batch = writeBatch(db);
+      batch.set(classRef, { coach: [coachId] }, { merge: true });
+      batch.delete(replacementRef);
+      await batch.commit();
+
+      setCoaches([coachId]);
+      setReplacement(null);
+      setReplacementCoachId('');
+      updateCachedClass(groupId, date, { coach: [coachId] });
+      markReadCacheChanged(replacementCache);
+      replacementCache.set(`${groupId}:${date}`, null);
+      invalidateReadCache(scheduleCache);
+      invalidateReadCache(coachTasksCache);
+      invalidateSalarySummaries();
+    } catch (error) {
+      console.error('Failed to update the class coach:', error);
+      alert('❌ Failed to update the class coach');
+    } finally {
+      setSavingClassCoach(false);
+    }
+  };
+
+  const handleToggleUnpaidAttendee = async (studentId) => {
+    if (
+      !classExists ||
+      !canEditComment ||
+      classMutationBlocked ||
+      savingUnpaidAttendeeId
+    ) return;
+
+    const isSelected = unpaidAttendeeIds.includes(studentId);
+    const nextIds = isSelected
+      ? unpaidAttendeeIds.filter(id => id !== studentId)
+      : [...unpaidAttendeeIds, studentId];
+
+    setSavingUnpaidAttendeeId(studentId);
+    try {
+      await setDoc(classRef, { unpaidAttendees: nextIds }, { merge: true });
+      setUnpaidAttendeeIds(nextIds);
+      updateCachedClass(groupId, date, { unpaidAttendees: nextIds });
+      invalidateSalarySummaries();
+    } catch (error) {
+      console.error('Failed to update unpaid attendance:', error);
+      alert('❌ Failed to update unpaid attendance');
+    } finally {
+      setSavingUnpaidAttendeeId('');
+    }
+  };
+
+  const handleRemoveUnpaidAttendee = (student) => {
+    if (!window.confirm(`Remove ${student.name} from the unpaid students list?`)) return;
+    handleToggleUnpaidAttendee(student.id);
+  };
+
   const handleConfirmReplacement = async () => {
     if (
       replacementMutationBlocked ||
@@ -806,12 +894,33 @@ function GroupClassDetailPage() {
   const proposedCoachName = replacement
     ? (coachNameById.get(replacement.suggestedCoach) || replacement.suggestedCoach)
     : '';
+  const currentClassCoachId = coachesThisClass?.[0] || '';
+  const pastClassCoachOptions = isAdminAccount
+    ? (coaches || [])
+    : (coaches || []).filter(coach => coach.id === user?.id || coach.id === currentClassCoachId);
+  const paidStudents = Array.isArray(signedUp)
+    ? signedUp.filter(student => student.hasPaymentForClass)
+    : [];
+  const paidStudentIds = new Set(paidStudents.map(student => student.id));
+  const unpaidAttendeeStudents = students
+    .filter(student => unpaidAttendeeIds.includes(student.id))
+    .filter(student => !paidStudentIds.has(student.id))
+    .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
+  const availableSignedStudents = students
+    .filter(student => Array.isArray(group?.signedStudents) && group.signedStudents.includes(student.id))
+    .filter(student => !paidStudentIds.has(student.id) && !unpaidAttendeeIds.includes(student.id))
+    .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
 
   if (!classStateReady) {
     return (
       <div className="class-detail-page">
-        <h2>{group?.name?.toUpperCase()}</h2>
-        <p>{date}</p>
+        <header className="class-detail-header">
+          <div>
+            <h2>{group?.name?.toUpperCase()}</h2>
+            <p>{date}</p>
+          </div>
+          <button type="button" onClick={() => navigate(`/group/${groupId}/details`)}>SIGNED STUDENTS</button>
+        </header>
         <RefreshStatus
           message="Class details have not been loaded yet"
           error={classStatusError}
@@ -826,11 +935,16 @@ function GroupClassDetailPage() {
 
   return (
     <div className="class-detail-page">
-      <h2>{group?.name?.toUpperCase()}</h2>
-      <p>{date}</p>
+      <header className="class-detail-header">
+        <div>
+          <h2>{group?.name?.toUpperCase()}</h2>
+          <p>{date}</p>
+        </div>
+        <button type="button" onClick={() => navigate(`/group/${groupId}/details`)}>SIGNED STUDENTS</button>
+      </header>
       <RefreshStatus
         message={classStatusLoading ? 'Checking class data…' : 'Class data is loaded'}
-        error={studentsError || paymentsError || classStatusError || replacementError}
+        error={studentsError || paymentsError || classStatusError || (isFutureDate(date) ? replacementError : '')}
         loading={refreshingData || studentsLoading || paymentsLoading || classStatusLoading}
         onRefresh={handleRefreshData}
         refreshLabel="Refresh class data"
@@ -859,10 +973,28 @@ function GroupClassDetailPage() {
         </section>
       )}
 
-      {!replacementStateReady && !replacementError && (
+      {!isFutureDate(date) && classExists && (user?.role === 'admin' || user?.role === 'coach') && (
+        <label className="past-class-coach-field">
+          <span>Coach</span>
+          <select
+            value={currentClassCoachId}
+            onChange={event => handlePastClassCoachChange(event.target.value)}
+            disabled={savingClassCoach || classStatusLoading}
+          >
+            {!currentClassCoachId && <option value="">No coach assigned</option>}
+            {pastClassCoachOptions.map(coach => (
+              <option key={coach.id} value={coach.id}>
+                {coach.id === user?.id ? `${coach.name || coach.id} (me)` : coach.name || coach.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {isFutureDate(date) && !replacementStateReady && !replacementError && (
         <p role="status">Loading replacement details...</p>
       )}
-      {replacementStateReady && (canSuggestReplacement || replacement) && (
+      {isFutureDate(date) && replacementStateReady && (canSuggestReplacement || replacement) && (
         <section className="replacement-card">
           <h3>Replacement coach</h3>
 
@@ -967,8 +1099,8 @@ function GroupClassDetailPage() {
         ? (<p role="status">Loading people for this class...</p>)
         : signedUp?.length === 0
         ? (isCanceled
-            ? (<h3 style={{ color: 'red' }}>🚫 CLASS CANCELED</h3>)
-            : (<h3 style={{ color: 'red' }}>🚫 NO PEOPLE</h3>)
+            ? (<h3 style={{ color: '#ff76b7' }}>🚫 CLASS CANCELED</h3>)
+            : (<h3 style={{ color: '#ff76b7' }}>🚫 NO PEOPLE</h3>)
           ) : (
         <>
         {classExists && !isCanceled && !attendanceCompleted && (
@@ -1004,26 +1136,27 @@ function GroupClassDetailPage() {
               }
             </>
           )}
-          <h3>PEOPLE</h3>
-          <div className="classes-header">
+          <h3>PAID STUDENTS</h3>
+          <div className="classes-header attendance-list-header">
             <span>PERSON</span>
             {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") && <span>MONEY</span>}
             <span>ATTENDED</span>
           </div>
 
-          <ul className="student-list">
-            {signedUp?.map((s, i) => {
+          <ul className="student-list attendance-student-list">
+            {paidStudents.map((s, i) => {
               const isAbsent = !!absences?.[s.id]?.[date]?.includes(groupId);
               const icon = !classExists ? '🕒' : isAbsent ? '❌' : '✅';
               const displayIcon = loadingAbsences ? '🔄' : (loadingId === s.id ? '🔄' : icon);
 
               return (
-                <li key={i} className="class-item">
-                  <span onClick={() => navigate(`/student/${s.id}`)}>{i + 1} {s.name?.slice(0, 30)}</span>
+                <li key={i} className="class-item attendance-student-row">
+                  <span className="attendance-person" onClick={() => navigate(`/student/${s.id}`)}>{i + 1} {s.name?.slice(0, 30)}</span>
                   {((user?.role === "coach" && coachesThisClass?.includes(user.id)) || user?.role === "admin") &&
-                    <span onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
+                    <span className="attendance-payment" onClick={() => navigate(`/student/${s.id}`)}>{s.amount}€</span>
                   }
                   <span
+                    className="attendance-mark"
                     style={{ cursor: !classExists || !canEditComment ? 'not-allowed' : 'pointer' }}
                     onClick={() => !classMutationBlocked && classExists && canEditComment && toggleAttendance(s.id)}
                   >
@@ -1035,14 +1168,67 @@ function GroupClassDetailPage() {
           </ul>
         </>
       )}
+      {classExists && !isCanceled && unpaidAttendeeStudents.length > 0 && (
+        <section className="unpaid-students-list-section">
+          <h3>UNPAID STUDENTS</h3>
+          <div className="classes-header attendance-list-header">
+            <span>PERSON</span>
+            <span>PAYMENT</span>
+            <span>ATTENDED</span>
+          </div>
+          <ul className="student-list attendance-student-list">
+            {unpaidAttendeeStudents.map((student, index) => (
+              <li key={student.id} className="class-item attendance-student-row">
+                <span className="attendance-person" onClick={() => navigate(`/student/${student.id}`)}>{index + 1} {student.name?.slice(0, 30)}</span>
+                <span className="attendance-payment unpaid-payment-label" onClick={() => navigate(`/student/${student.id}`)}>UNPAID</span>
+                <button
+                  type="button"
+                  className="attendance-mark unpaid-attended-button"
+                  onClick={() => handleRemoveUnpaidAttendee(student)}
+                  disabled={!canEditComment || classMutationBlocked || Boolean(savingUnpaidAttendeeId)}
+                  aria-label={`Remove ${student.name} from unpaid students`}
+                >
+                  {savingUnpaidAttendeeId === student.id ? '…' : '✅'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {classExists && !isCanceled && availableSignedStudents.length > 0 && (
+        <section className="unpaid-attendees unpaid-attendees--available">
+          <div className="unpaid-attendees-heading">
+            <div>
+              <h3>Signed students</h3>
+            </div>
+          </div>
+          <ul>
+            {availableSignedStudents.map(student => (
+              <li key={student.id} className="unpaid-attendee-row">
+                <button type="button" className="unpaid-attendee-person" onClick={() => navigate(`/student/${student.id}`)}>
+                  {student.name}
+                </button>
+                <button
+                  type="button"
+                  className="unpaid-add-button"
+                  onClick={() => handleToggleUnpaidAttendee(student.id)}
+                  disabled={!canEditComment || classMutationBlocked || Boolean(savingUnpaidAttendeeId)}
+                >
+                  {savingUnpaidAttendeeId === student.id ? 'Adding…' : '+ Add'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {classExists && (
         <div className="comment-box">
-          <div className="comment-label">STUDENTS THAT CAME BUT ARE NOT IN THE LIST</div>
+          <div className="comment-label">COMMENT</div>
           <textarea
             className="comment-textarea"
             value={comment}
             onChange={(e) => canEditComment && setComment(e.target.value)}
-            placeholder={canEditComment ? 'Write student names' : 'No additional students'}
+            placeholder={canEditComment ? 'Write a comment' : 'No comment'}
             readOnly={!canEditComment}
             rows={4}
           />

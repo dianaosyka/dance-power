@@ -9,7 +9,7 @@
   margin: auto;
   padding: 20px;
   overflow: hidden;
-  background: #d9006c;
+  background: transparent;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -21,11 +21,21 @@
   margin-bottom: 20px;
 }
 
+.history-heading-copy p {
+  margin: 0 0 4px;
+  color: #73eff8;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+}
+
 .history-title {
   min-width: 0;
   margin: 0;
-  color: #ffe7fd;
-  font-size: clamp(20px, 5.45vw, 24px);
+  color: #ffffff;
+  font-size: clamp(22px, 5.6vw, 27px);
+  font-weight: 950;
+  line-height: 1;
 }
 
 .history-add-payment {
@@ -72,30 +82,29 @@
 }
 
 .history-sort {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   margin-bottom: 16px;
-  color: #ffe7fd;
-}
-
-.history-sort-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.8;
+  color: #ffffff;
 }
 
 .history-sort-tabs {
   display: flex;
-  gap: 6px;
+  gap: 3px;
 }
 
 .history-sort-tab {
   flex: 1;
   min-width: 0;
-  padding: 8px 4px;
+  min-height: 34px;
+  padding: 5px 4px;
   border: 0;
   border-radius: 7px;
-  background: rgba(255, 231, 253, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.055);
   color: rgba(255, 255, 255, 0.82);
   font: inherit;
   font-size: 12px;
@@ -104,8 +113,9 @@
 }
 
 .history-sort-tab.active {
-  background: rgba(87, 0, 44, 0.38);
-  color: #ffffff;
+  border-color: rgba(115, 239, 248, 0.3);
+  background: rgba(115, 239, 248, 0.13);
+  color: #73eff8;
   font-weight: 600;
 }
 
@@ -117,13 +127,23 @@
 }
 
 .transaction-list {
-  margin: 0 -20px;
+  max-height: min(65vh, 720px);
+  margin: 0;
   padding: 0;
-  border-top: 1px solid #dce5ec;
-  border-bottom: 1px solid #dce5ec;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(151, 235, 255, 0.28);
+  border-radius: 16px;
   background: #ffffff;
+  box-shadow: 0 18px 42px rgba(2, 0, 45, 0.3);
+  scrollbar-color: #7569b5 #eef3f8;
+  scrollbar-width: thin;
   list-style: none;
 }
+
+.transaction-list::-webkit-scrollbar { width: 7px; }
+.transaction-list::-webkit-scrollbar-track { background: #eef3f8; }
+.transaction-list::-webkit-scrollbar-thumb { border: 2px solid #eef3f8; border-radius: 999px; background: #7569b5; }
 
 .transaction-card {
   margin: 0;

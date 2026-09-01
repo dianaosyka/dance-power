@@ -161,6 +161,7 @@ describe('CreateGroupPage', () => {
         time: '18:30',
         schedule: 'TUESDAY 18:30',
         coach: 'coach-2',
+        signedStudents: [],
         hidden: true,
         createdAt: mockTimestampValue,
         createdBy: 'admin-1',
