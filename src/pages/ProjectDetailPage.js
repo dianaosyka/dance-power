@@ -11,7 +11,6 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import RefreshStatus from '../components/RefreshStatus';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
-import { invalidateProjectPaymentHistory } from '../utils/projectPaymentsCache';
 import {
   getPaymentMethodLabel,
 } from '../utils/paymentMethodUtils';
@@ -495,56 +494,6 @@ function ProjectDetailPage() {
     );
   };
 
-  const handleDeleteProjectPayment = async payment => {
-    if (!isAdmin || !project || !payment?.studentId) return;
-    if (!window.confirm(`Delete the project payment for ${payment.studentName || payment.studentId}?`)) {
-      return;
-    }
-
-    const studentId = payment.studentId;
-    const paymentId = payment.id || studentId;
-    const mutationKey = `payment:delete:${paymentId}`;
-    if (!startMutation(mutationKey)) return;
-
-    const mutationProjectId = projectId;
-    const projectRef = doc(db, 'projects', mutationProjectId);
-    const paymentRef = doc(db, `projects/${mutationProjectId}/payments`, paymentId);
-
-    try {
-      await runTransaction(db, async transaction => {
-        const projectSnapshot = await transaction.get(projectRef);
-        const paymentSnapshot = await transaction.get(paymentRef);
-
-        if (!projectSnapshot.exists()) {
-          throw createProjectActionError('project-missing', 'This project no longer exists.');
-        }
-        if (!paymentSnapshot.exists()) {
-          throw createProjectActionError('payment-missing', 'This payment was already deleted.');
-        }
-
-        transaction.delete(paymentRef);
-      });
-
-      invalidateSalarySummaries();
-      invalidateProjectPaymentHistory();
-      if (activeProjectId.current === mutationProjectId) {
-        projectLoadGeneration.current += 1;
-        setProjectPayments(current => current.filter(
-          item => item.id !== paymentId
-        ));
-        setProjectDataLoadedAt(Date.now());
-        setActionMessage(`Payment for ${payment.studentName || studentId} was deleted.`);
-      }
-    } catch (error) {
-      console.error('Failed to delete project payment:', error);
-      if (activeProjectId.current === mutationProjectId) {
-        setActionError(getErrorMessage(error));
-      }
-    } finally {
-      finishMutation();
-    }
-  };
-
   const projectSourceError = [
     projectsError ? `Project: ${getErrorMessage(projectsError)}` : '',
     signedStudentsError ? `Roster: ${signedStudentsError}` : '',
@@ -894,9 +843,20 @@ function ProjectDetailPage() {
               {sortedPayments.map(payment => {
                 const currentStudent = studentsById.get(payment.studentId);
                 const studentName = currentStudent?.name || payment.studentName || payment.studentId;
-                const deleteMutationKey = `payment:delete:${payment.id || payment.studentId}`;
                 return (
-                  <li key={payment.id || payment.studentId}>
+                  <li
+                    key={payment.id || payment.studentId}
+                    className="project-payment-link"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/student/${encodeURIComponent(payment.studentId)}?projectPaymentId=${encodeURIComponent(payment.id || payment.studentId)}&projectId=${encodeURIComponent(projectId)}`)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/student/${encodeURIComponent(payment.studentId)}?projectPaymentId=${encodeURIComponent(payment.id || payment.studentId)}&projectId=${encodeURIComponent(projectId)}`);
+                      }
+                    }}
+                  >
                     <div className="project-payment-main">
                       <span className="project-payment-icon" aria-hidden="true">€</span>
                       <span>
@@ -912,17 +872,6 @@ function ProjectDetailPage() {
                       <strong>{formatMoney(payment.amount)}</strong>
                       <small>Recorded by {payment.recordedByRole || 'staff'}</small>
                     </div>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        className="project-delete-payment"
-                        onClick={() => handleDeleteProjectPayment(payment)}
-                        disabled={allActionsDisabled}
-                        aria-label={`Delete project payment for ${studentName}`}
-                      >
-                        {activeMutation === deleteMutationKey ? 'Deleting…' : 'Delete'}
-                      </button>
-                    )}
                   </li>
                 );
               })}

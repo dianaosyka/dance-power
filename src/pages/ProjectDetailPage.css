@@ -819,3 +819,13 @@
     animation: none;
   }
 }
+/* Project payment rows open the exact payment on the student's Projects tab. */
+.project-payments-list .project-payment-link {
+  cursor: pointer;
+}
+
+.project-payments-list .project-payment-link:hover,
+.project-payments-list .project-payment-link:focus-visible {
+  background: rgba(91, 232, 255, 0.08);
+  outline: none;
+}

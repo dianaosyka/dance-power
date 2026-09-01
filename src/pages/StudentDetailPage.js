@@ -28,6 +28,13 @@ import {
   invalidateWorkshopPaymentHistory,
   loadWorkshopPaymentHistory,
 } from '../utils/workshopPaymentsCache';
+import {
+  getProjectPaymentHistoryCache,
+  hasFreshProjectPaymentHistory,
+  invalidateProjectPaymentHistory,
+  loadProjectPaymentHistory,
+} from '../utils/projectPaymentsCache';
+import { PROJECT_PAYMENT_PART_LABELS } from '../utils/projectPaymentUtils';
 
 function getPaymentSortValue(payment) {
   if (typeof payment?.timestamp?.toMillis === 'function') {
@@ -51,6 +58,7 @@ function StudentDetailPage() {
     payments,
     groups,
     workshops = [],
+    projects = [],
     pastClassesByGroup,
     loadPastClassDocs,
     studentsLoaded,
@@ -76,13 +84,15 @@ function StudentDetailPage() {
   const otherPaymentIdFromHistory = new URLSearchParams(location.search).get('otherPaymentId') || '';
   const workshopPaymentIdFromHistory = new URLSearchParams(location.search).get('workshopPaymentId') || '';
   const workshopIdFromHistory = new URLSearchParams(location.search).get('workshopId') || '';
+  const projectPaymentIdFromHistory = new URLSearchParams(location.search).get('projectPaymentId') || '';
+  const projectIdFromHistory = new URLSearchParams(location.search).get('projectId') || '';
   const isStaff = user?.role === 'admin' || user?.role === 'coach';
   const isAdmin = user?.role === 'admin';
   const otherPaymentScope = user?.id || user?.role || 'signed-out';
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [paymentDetailView, setPaymentDetailView] = useState(
-    () => otherPaymentIdFromHistory ? 'other' : workshopPaymentIdFromHistory ? 'workshop' : 'group'
+    () => otherPaymentIdFromHistory ? 'other' : workshopPaymentIdFromHistory ? 'workshop' : projectPaymentIdFromHistory ? 'project' : 'group'
   );
   const [absences, setAbsences] = useState({});
   const [classes, setClasses] = useState([]);
@@ -115,6 +125,12 @@ function StudentDetailPage() {
   const [workshopPaymentsLoading, setWorkshopPaymentsLoading] = useState(false);
   const [workshopPaymentsError, setWorkshopPaymentsError] = useState('');
   const [deletingWorkshopPaymentId, setDeletingWorkshopPaymentId] = useState('');
+  const [projectPayments, setProjectPayments] = useState(
+    () => getProjectPaymentHistoryCache(otherPaymentScope).payments
+  );
+  const [projectPaymentsLoading, setProjectPaymentsLoading] = useState(false);
+  const [projectPaymentsError, setProjectPaymentsError] = useState('');
+  const [deletingProjectPaymentId, setDeletingProjectPaymentId] = useState('');
   const studentLoadGeneration = useRef(0);
   const paymentsLoadGeneration = useRef(0);
   const detailRefreshInProgress = useRef(false);
@@ -125,6 +141,35 @@ function StudentDetailPage() {
   const appliedOtherPaymentLink = useRef('');
   const selectedWorkshopPaymentElement = useRef(null);
   const appliedWorkshopPaymentLink = useRef('');
+  const selectedProjectPaymentElement = useRef(null);
+  const appliedProjectPaymentLink = useRef('');
+
+  const loadProjectPayments = useCallback(async ({ force = false } = {}) => {
+    if (!isStaff) return [];
+    if (!force && hasFreshProjectPaymentHistory(otherPaymentScope, projects, STAFF_DATA_CACHE_TTL_MS)) {
+      const cached = getProjectPaymentHistoryCache(otherPaymentScope);
+      setProjectPayments(cached.payments);
+      return cached.payments;
+    }
+    setProjectPaymentsLoading(true);
+    setProjectPaymentsError('');
+    try {
+      const result = await loadProjectPaymentHistory(db, projects, otherPaymentScope);
+      setProjectPayments(result.payments);
+      return result.payments;
+    } catch (error) {
+      setProjectPaymentsError(error?.message || String(error));
+      throw error;
+    } finally {
+      setProjectPaymentsLoading(false);
+    }
+  }, [db, isStaff, otherPaymentScope, projects]);
+
+  useEffect(() => {
+    if (!isStaff) return undefined;
+    loadProjectPayments().catch(() => {});
+    return undefined;
+  }, [isStaff, loadProjectPayments]);
 
   const loadWorkshopPayments = useCallback(async ({ force = false } = {}) => {
     if (!isStaff) return [];
@@ -310,7 +355,11 @@ function StudentDetailPage() {
   const studentWorkshopPayments = sortPaymentsNewestFirst(
     workshopPayments.filter(payment => payment.studentId === studentId)
   );
+  const studentProjectPayments = sortPaymentsNewestFirst(
+    projectPayments.filter(payment => payment.studentId === studentId)
+  );
   const workshopsById = new Map(workshops.map(workshop => [workshop.id, workshop]));
+  const projectsById = new Map(projects.map(project => [project.id, project]));
 
   useEffect(() => {
     if (!paymentIdFromHistory) return;
@@ -336,8 +385,17 @@ function StudentDetailPage() {
   useEffect(() => {
     if (otherPaymentIdFromHistory) setPaymentDetailView('other');
     else if (workshopPaymentIdFromHistory) setPaymentDetailView('workshop');
+    else if (projectPaymentIdFromHistory) setPaymentDetailView('project');
     else if (paymentIdFromHistory) setPaymentDetailView('group');
-  }, [otherPaymentIdFromHistory, paymentIdFromHistory, workshopPaymentIdFromHistory]);
+  }, [otherPaymentIdFromHistory, paymentIdFromHistory, projectPaymentIdFromHistory, workshopPaymentIdFromHistory]);
+
+  useEffect(() => {
+    if (!projectPaymentIdFromHistory || projectPaymentsLoading) return;
+    const linkKey = `${studentId}:${projectIdFromHistory}:${projectPaymentIdFromHistory}`;
+    if (appliedProjectPaymentLink.current === linkKey || !selectedProjectPaymentElement.current) return;
+    selectedProjectPaymentElement.current.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    appliedProjectPaymentLink.current = linkKey;
+  }, [projectIdFromHistory, projectPaymentIdFromHistory, projectPaymentsLoading, studentId, studentProjectPayments]);
 
   useEffect(() => {
     if (!workshopPaymentIdFromHistory || workshopPaymentsLoading) return;
@@ -579,6 +637,31 @@ function StudentDetailPage() {
     navigate(`/add-payment?mode=workshop&studentId=${encodeURIComponent(student.id)}`);
   };
 
+  const handleAddProjectPayment = () => {
+    if (!isStaff || !student) return;
+    navigate(`/add-payment?mode=project&studentId=${encodeURIComponent(student.id)}`);
+  };
+
+  const handleDeleteProjectPayment = async payment => {
+    if (!isAdmin || deletingProjectPaymentId || !payment?.id || !payment?.projectId) return;
+    if (!window.confirm('Are you sure you want to delete this project payment?')) return;
+    setDeletingProjectPaymentId(payment.id);
+    try {
+      await deleteDoc(doc(db, `projects/${payment.projectId}/payments`, payment.id));
+      setProjectPayments(current => current.filter(item => !(
+        item.id === payment.id && item.projectId === payment.projectId
+      )));
+      invalidateProjectPaymentHistory();
+      invalidateSalarySummaries();
+      alert('✅ Project payment deleted');
+    } catch (error) {
+      console.error('Failed to delete project payment:', error);
+      alert('❌ Error deleting project payment');
+    } finally {
+      setDeletingProjectPaymentId('');
+    }
+  };
+
   const handleDeleteWorkshopPayment = async payment => {
     if (!isAdmin || deletingWorkshopPaymentId || !payment?.id || !payment?.workshopId) return;
     if (!window.confirm('Are you sure you want to delete this workshop payment?')) return;
@@ -652,6 +735,7 @@ function StudentDetailPage() {
         handleRefreshPayments(),
         ...(isAdmin ? [loadOtherPayments({ force: true })] : []),
         ...(isStaff ? [loadWorkshopPayments({ force: true })] : []),
+        ...(isStaff ? [loadProjectPayments({ force: true })] : []),
       ]);
     } finally {
       detailRefreshInProgress.current = false;
@@ -660,7 +744,7 @@ function StudentDetailPage() {
   };
 
   const detailDataLoading =
-    refreshingDetail || studentDataLoading || paymentDataLoading || otherPaymentsLoading || workshopPaymentsLoading;
+    refreshingDetail || studentDataLoading || paymentDataLoading || otherPaymentsLoading || workshopPaymentsLoading || projectPaymentsLoading;
   const formatCheckedAt = timestamp => timestamp
     ? new Date(timestamp).toLocaleString()
     : 'not updated yet';
@@ -695,6 +779,14 @@ function StudentDetailPage() {
         onClick={() => setPaymentDetailView('workshop')}
       >
         Workshops
+      </button>
+      <button
+        type="button"
+        className={paymentDetailView === 'project' ? 'active' : ''}
+        aria-pressed={paymentDetailView === 'project'}
+        onClick={() => setPaymentDetailView('project')}
+      >
+        Projects
       </button>
       {isAdmin && (
       <button
@@ -795,6 +887,19 @@ function StudentDetailPage() {
       })}</ul>}
     </section>
   ) : null;
+  const projectPaymentsSection = isStaff ? (
+    <section className="student-other-payments" aria-labelledby="student-project-payments-title">
+      <div className="student-other-payments-header"><div><h3 id="student-project-payments-title">PROJECT PAYMENTS</h3><span>{studentProjectPayments.length} total</span></div><button type="button" className="student-other-payment-add" onClick={handleAddProjectPayment} disabled={!student}>+ Add project</button></div>
+      {projectPaymentsLoading && studentProjectPayments.length === 0 && <p className="student-other-payments-message">Loading project payments…</p>}
+      {projectPaymentsError && <div className="student-other-payments-error" role="alert"><span>{projectPaymentsError}</span><button type="button" onClick={() => loadProjectPayments({ force: true }).catch(() => {})}>Retry</button></div>}
+      {!projectPaymentsLoading && !projectPaymentsError && studentProjectPayments.length === 0 && <p className="student-other-payments-message">No project payments.</p>}
+      {studentProjectPayments.length > 0 && <ul className="student-other-payments-list">{studentProjectPayments.map(payment => {
+        const project = projectsById.get(payment.projectId);
+        const isSelected = payment.id === projectPaymentIdFromHistory && payment.projectId === projectIdFromHistory;
+        return <li key={`${payment.projectId}-${payment.id}`} ref={isSelected ? selectedProjectPaymentElement : null} className={`student-other-payment-row${isSelected ? ' is-selected' : ''}`}><div className="student-other-payment-summary"><div><strong>{project?.name || payment.projectName || payment.projectId}</strong><span>{PROJECT_PAYMENT_PART_LABELS[payment.paymentPart] || 'Full payment'}</span><span>Project starts: {payment.dateFrom}</span><span>Paid: {payment.createdAt} · {getPaymentMethodLabel(payment.paymentMethod)}</span></div><strong className="student-other-payment-amount">{Number(payment.amount).toFixed(2)}€</strong></div>{isAdmin && <button type="button" className="student-other-payment-delete" onClick={() => handleDeleteProjectPayment(payment)} disabled={Boolean(deletingProjectPaymentId)}>{deletingProjectPaymentId === payment.id ? 'Deleting…' : 'Delete'}</button>}</li>;
+      })}</ul>}
+    </section>
+  ) : null;
 
   if (!studentDataLoaded) {
     if (studentDataError) {
@@ -878,6 +983,7 @@ function StudentDetailPage() {
 
         {paymentDetailView === 'other' && otherPaymentsSection}
         {paymentDetailView === 'workshop' && workshopPaymentsSection}
+        {paymentDetailView === 'project' && projectPaymentsSection}
 
         {user?.role === 'admin' && (
           <div style={{ marginTop: '10px', textAlign: 'center' }}>
@@ -1013,6 +1119,7 @@ function StudentDetailPage() {
 
       {paymentDetailView === 'other' && otherPaymentsSection}
       {paymentDetailView === 'workshop' && workshopPaymentsSection}
+      {paymentDetailView === 'project' && projectPaymentsSection}
 
       <div>
         {(user?.role === 'coach' || (isAdmin && paymentDetailView === 'group')) && (
