@@ -365,11 +365,26 @@ function SalaryPage() {
           );
           const classCoachesTotal = coachIds.length * coachPay;
           const classEarned = classGross - rent - classCoachesTotal;
-          const unpaidStudents = (Array.isArray(classData?.unpaidAttendees) ? classData.unpaidAttendees : [])
-            .map(studentId => calculationStudents.find(student => student.id === studentId))
-            .filter(Boolean)
-            .map(student => ({ id: student.id, name: student.name || student.email || student.id }));
 
+          const paidStudentIds = new Set(
+            signedUp.map(student => student.id)
+          );
+
+          const unpaidStudents = (
+            Array.isArray(classData?.unpaidAttendees)
+              ? classData.unpaidAttendees
+              : []
+          )
+            .filter(studentId => !paidStudentIds.has(studentId))
+            .map(studentId =>
+              calculationStudents.find(student => student.id === studentId)
+            )
+            .filter(Boolean)
+            .map(student => ({
+              id: student.id,
+              name: student.name || student.email || student.id,
+            }));
+            
           grossTotal += classGross;
           rentTotal += rent;
           coachesTotal += classCoachesTotal;
