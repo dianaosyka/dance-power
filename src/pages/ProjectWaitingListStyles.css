@@ -1,0 +1,65 @@
+.project-waiting-style-label {
+  display: block;
+  margin: 15px 0 6px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.project-waiting-style {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: inherit;
+}
+
+.project-waiting-style:focus {
+  border-color: #ff91ca;
+  box-shadow: 0 0 0 3px rgba(255, 102, 184, 0.17);
+}
+
+.project-waiting-style option {
+  background: #2d0754;
+  color: #fff;
+}
+
+.project-waiting-style-help {
+  margin: 7px 0 0;
+  color: #ffcadf;
+  font-size: 11px;
+}
+
+.project-waiting-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.project-waiting-group header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.project-waiting-group h3 {
+  margin: 0;
+  color: #ffacd7;
+  font-size: 15px;
+}
+
+.project-waiting-group header span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 10px;
+  font-weight: 850;
+}

@@ -67,6 +67,7 @@ function staffRouteRequirements(pathname, role) {
   const isClassDetail = /^\/group\/[^/]+\/class\/[^/]+$/.test(normalizedPath);
   const isPaymentHistory = normalizedPath === '/payment-history';
   const isProjectDetail = /^\/project\/[^/]+$/.test(normalizedPath);
+  const isProjectWaitingList = normalizedPath === '/project-waiting-list';
   const isWorkshopDetail = /^\/workshop\/[^/]+$/.test(normalizedPath);
   const isGroupDetails = /^\/group\/[^/]+\/details$/.test(normalizedPath);
 
@@ -78,6 +79,7 @@ function staffRouteRequirements(pathname, role) {
       isGroupDetails ||
       isPaymentHistory ||
       isProjectDetail ||
+      isProjectWaitingList ||
       isWorkshopDetail,
     payments: isClassDetail || isPaymentHistory,
   };

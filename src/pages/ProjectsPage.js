@@ -88,15 +88,10 @@ function ProjectsPage() {
             <p>FIXED PROGRAMS</p>
             <h1>Projects</h1>
           </div>
-          {isAdmin ? (
-            <button
-              type="button"
-              className="projects-create"
-              onClick={() => navigate('/create-group?kind=project')}
-            >
-              + Create
-            </button>
-          ) : <span aria-hidden="true" />}
+          <div className="projects-header-actions">
+            <button type="button" className="projects-waiting-link" onClick={() => navigate('/project-waiting-list')}>Waiting list</button>
+            {isAdmin && <button type="button" className="projects-create" onClick={() => navigate('/create-group?kind=project')}>+ Create</button>}
+          </div>
         </header>
 
         <div className="projects-toolbar">

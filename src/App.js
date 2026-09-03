@@ -17,6 +17,7 @@ import SchedulePage from './pages/SchedulePage';
 import CreateGroupPage from './pages/CreateGroupPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import ProjectWaitingListPage from './pages/ProjectWaitingListPage';
 import WorkshopsPage from './pages/WorkshopsPage';
 import WorkshopDetailPage from './pages/WorkshopDetailPage';
 import CreateWorkshopPage from './pages/CreateWorkshopPage';
@@ -74,6 +75,10 @@ function AppRoutes() {
       <Route
         path="/project/:projectId"
         element={isStaff ? <ProjectDetailPage /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/project-waiting-list"
+        element={isStaff ? <ProjectWaitingListPage /> : <Navigate to="/" replace />}
       />
       <Route
         path="/create-group"
