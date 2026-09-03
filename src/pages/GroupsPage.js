@@ -11,6 +11,7 @@ function GroupsPage() {
   const { user, accountUser, setUser, viewAsCoach, setViewAsCoach } = useUser();
   const navigate = useNavigate();
   const [showHiddenGroups, setShowHiddenGroups] = useState(false);
+  const [includeAllWarnings, setIncludeAllWarnings] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -113,7 +114,9 @@ function GroupsPage() {
           </div>
         </div>
 
-        {(user?.role === 'admin' || user?.role === 'coach') && <CoachTasksPage />}
+        {(user?.role === 'admin' || user?.role === 'coach') && (
+          <CoachTasksPage includeAllWarnings={includeAllWarnings} />
+        )}
 
         {(user?.role === 'admin' || user?.role === 'coach') && (
           <div className="add-button-container">
@@ -144,15 +147,29 @@ function GroupsPage() {
         )}
 
         {accountUser?.role === 'admin' && (
-          <label className="view-mode-switch">
-            <span>Coach view</span>
-            <input
-              type="checkbox"
-              checked={viewAsCoach}
-              onChange={(event) => setViewAsCoach(event.target.checked)}
-            />
-            <span className="view-mode-slider" aria-hidden="true" />
-          </label>
+          <div className="view-controls">
+            <label className="warnings-scope-toggle warnings-scope-toggle--footer">
+              <input
+                type="checkbox"
+                checked={includeAllWarnings}
+                disabled={viewAsCoach}
+                onChange={event => setIncludeAllWarnings(event.target.checked)}
+              />
+              <span>Show all warnings</span>
+            </label>
+            <label className="view-mode-switch">
+              <span>Coach view</span>
+              <input
+                type="checkbox"
+                checked={viewAsCoach}
+                onChange={(event) => {
+                  setViewAsCoach(event.target.checked);
+                  if (event.target.checked) setIncludeAllWarnings(false);
+                }}
+              />
+              <span className="view-mode-slider" aria-hidden="true" />
+            </label>
+          </div>
         )}
 
       </div>

@@ -76,7 +76,7 @@ function formatCheckedTime(timestamp) {
   return `Last updated: ${new Date(timestamp).toLocaleString()}`;
 }
 
-function CoachTasksPage() {
+function CoachTasksPage({ includeAllWarnings = false }) {
   const { db, groups, coachTasksCache } = useData();
   const { user, accountUser, viewAsCoach } = useUser();
   const navigate = useNavigate();
@@ -84,7 +84,6 @@ function CoachTasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [includeAllWarnings, setIncludeAllWarnings] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState(null);
   const [displayedWarningKey, setDisplayedWarningKey] = useState('');
   const [errorKey, setErrorKey] = useState('');
@@ -437,20 +436,6 @@ function CoachTasksPage() {
         refreshLabel={displayedError ? 'Try again' : 'Refresh warnings'}
         loadingLabel={displayedError ? 'Trying…' : 'Refreshing…'}
       />
-      {canViewAllWarnings && (
-        <label className="warnings-scope-toggle">
-          <input
-            type="checkbox"
-            checked={includeAllWarnings}
-            onChange={event => {
-              setIncludeAllWarnings(event.target.checked);
-              setExpanded(false);
-            }}
-          />
-          <span>Show all warnings</span>
-        </label>
-      )}
-
       {displayedWarnings.length > 0 && (
         <button
           type="button"

@@ -697,11 +697,8 @@ function SalaryPage() {
     studentsError ? `Students: ${studentsError}` : '',
     paymentsError ? `Payments: ${paymentsError}` : '',
   ].filter(Boolean).join(' · ');
-  const salaryStatusError = salarySourceError
-    || error
-    || (summaryIsStale && summary && !isCalculating
-      ? 'Saved salary may be outdated. It remains visible until you choose Refresh salary.'
-      : '');
+  const salaryStatusError = salarySourceError || error;
+  const salaryIsOutdated = Boolean(summaryIsStale && summary && !isCalculating);
 
   if (!isAdmin && !isCoach) {
     return (
@@ -750,7 +747,7 @@ function SalaryPage() {
           disabled={!groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded}
           refreshLabel={salaryActionLabel}
           loadingLabel={!groupsLoaded || !projectsLoaded || !workshopsLoaded || !coachesLoaded ? 'Loading data…' : 'Refreshing…'}
-          className="salary-refresh-status"
+          className={`salary-refresh-status${salaryIsOutdated ? ' is-stale' : ''}`}
         />
       </div>
 
