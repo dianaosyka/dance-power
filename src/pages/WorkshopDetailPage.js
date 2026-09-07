@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
+import { includesSearchText } from '../utils/searchUtils';
 
 import './WorkshopDetailPage.css';
 
@@ -24,7 +25,7 @@ function WorkshopDetailPage() {
   const paidIds = useMemo(() => new Set(payments.filter(p => p.status === 'active').map(p => p.studentId)), [payments]);
   const availableStudents = students.filter(student => !memberIds.has(student.id));
   const matchingStudents = studentSearch.trim()
-    ? availableStudents.filter(student => String(student.name || '').toLowerCase().includes(studentSearch.trim().toLowerCase())).slice(0, 8)
+    ? availableStudents.filter(student => includesSearchText(student.name, studentSearch.trim())).slice(0, 8)
     : [];
   const coachNames = new Map(coaches.map(coach => [coach.id, coach.name || coach.id]));
 

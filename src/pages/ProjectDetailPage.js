@@ -11,6 +11,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import RefreshStatus from '../components/RefreshStatus';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import {
   getPaymentMethodLabel,
 } from '../utils/paymentMethodUtils';
@@ -191,13 +192,13 @@ function ProjectDetailPage() {
   );
 
   const availableStudentMatches = useMemo(() => {
-    const normalizedSearch = studentSearch.trim().toLocaleLowerCase();
+    const normalizedSearch = normalizeSearchText(studentSearch.trim());
     if (!normalizedSearch || !studentsLoaded) return [];
 
     return (students || [])
       .filter(student => !signedStudentIds.has(student.id))
       .filter(student => [student.name, student.phone, student.id]
-        .some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch)))
+        .some(value => includesSearchText(value, normalizedSearch)))
       .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')))
       .slice(0, 15);
   }, [signedStudentIds, studentSearch, students, studentsLoaded]);

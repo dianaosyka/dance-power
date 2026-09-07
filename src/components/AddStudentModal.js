@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { collection, addDoc /* , serverTimestamp */ } from 'firebase/firestore';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import './AddStudentModal.css';
 
@@ -28,9 +28,9 @@ function AddStudentModal({ onClose }) {
       const studentData = {
         name: nameTrim,
         phone: phoneTrim,
+        createdAt: Timestamp.now(),
         // Group enrollment is managed explicitly from Group details.
         groups: [],
-        // createdAt: serverTimestamp(), // optional if you want
       };
       const studentRef = await addDoc(collection(db, 'students'), studentData);
       upsertStudent({ id: studentRef.id, ...studentData });

@@ -21,6 +21,7 @@ import { invalidateOtherPaymentHistory } from '../utils/otherPaymentsCache';
 import { invalidateProjectPaymentHistory } from '../utils/projectPaymentsCache';
 import { invalidateWorkshopPaymentHistory } from '../utils/workshopPaymentsCache';
 import { PAYMENT_METHODS } from '../utils/paymentMethodUtils';
+import { includesSearchText } from '../utils/searchUtils';
 import {
   getAvailableProjectPaymentParts,
   getProjectPaymentAmount,
@@ -108,7 +109,7 @@ function AddPaymentPage() {
       ? students.filter(student => !paidWorkshopStudentIds.has(student.id))
     : students;
   const filteredStudents = paymentStudentSource.filter(s =>
-    String(s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    includesSearchText(s.name, searchTerm)
   );
   const sortedGroups = groups
     .filter(group => group.hidden !== true)

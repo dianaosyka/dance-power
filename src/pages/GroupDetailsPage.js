@@ -4,6 +4,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import './GroupDetailsPage.css';
 
 const WEEKDAYS = [
@@ -55,10 +56,10 @@ function GroupDetailsPage() {
     [signedIds, students]
   );
   const availableStudents = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = normalizeSearchText(search.trim());
     return students
       .filter(student => !signedIds.has(student.id))
-      .filter(student => !term || String(student.name || '').toLowerCase().includes(term))
+      .filter(student => !term || includesSearchText(student.name, term))
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [search, signedIds, students]);
 

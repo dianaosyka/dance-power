@@ -3,6 +3,7 @@ import { collection, doc, getDocsFromServer, runTransaction, Timestamp } from 'f
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import './ProjectWaitingListPage.css';
 import './ProjectWaitingListStyles.css';
 import './ProjectWaitingListRedesign.css';
@@ -52,12 +53,12 @@ function ProjectWaitingListPage() {
     return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [waiting]);
   const matches = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase();
+    const term = normalizeSearchText(search.trim());
     if (!term) return [];
     return students
       .filter(student => !waitingIds.has(student.id))
       .filter(student => [student.name, student.phone, student.email, student.instagram]
-        .some(value => String(value || '').toLocaleLowerCase().includes(term)))
+        .some(value => includesSearchText(value, term)))
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
       .slice(0, 15);
   }, [search, students, waitingIds]);

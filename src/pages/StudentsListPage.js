@@ -5,10 +5,19 @@ import AddStudentModal from '../components/AddStudentModal';
 import RefreshStatus from '../components/RefreshStatus';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { includesSearchText } from '../utils/searchUtils';
 
 function initials(name) {
   return String(name || '?').trim().split(/\s+/).slice(0, 2)
     .map(part => part[0]).join('').toUpperCase();
+}
+
+function registrationTime(student) {
+  const value = student?.createdAt || student?.registeredAt;
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (Number.isFinite(value?.seconds)) return value.seconds * 1000;
+  const parsed = new Date(value || 0).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function StudentsListPage() {
@@ -32,11 +41,10 @@ function StudentsListPage() {
     const matchesGroup = selectedGroup
       ? (selectedGroupRecord?.signedStudents || []).includes(student.id)
       : true;
-    const matchesSearch = String(student.name || '')
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
+    const matchesSearch = [student.name, student.instagram]
+      .some(value => includesSearchText(value, searchTerm));
     return matchesGroup && matchesSearch;
-  });
+  }).sort((first, second) => registrationTime(first) - registrationTime(second));
 
   const lastLoadedText = studentsLastLoadedAt
     ? new Date(studentsLastLoadedAt).toLocaleString()
@@ -73,7 +81,7 @@ function StudentsListPage() {
               onChange={e => setSelectedGroup(e.target.value)}
             >
               <option value="">All groups</option>
-              {groups.map(group => (
+              {groups.filter(group => group.hidden !== true).map(group => (
                 <option key={group.id} value={group.id}>
                   {group.name}
                 </option>
@@ -87,7 +95,7 @@ function StudentsListPage() {
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
               <input
                 type="text"
-                placeholder="Search by name…"
+                placeholder="Search by name or Instagram…"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="input"
@@ -134,7 +142,12 @@ function StudentsListPage() {
               onClick={() => navigate(`/student/${student.id}`)}
             >
               <span className="students-list-avatar" aria-hidden="true">{initials(student.name)}</span>
-              <span className="students-list-name">{student.name.toUpperCase().slice(0, 40)}</span>
+              <span className="students-list-identity">
+                <span className="students-list-name">{String(student.name || '').toUpperCase().slice(0, 40)}</span>
+                {student.instagram && (
+                  <span className="students-list-instagram">Instagram: {student.instagram}</span>
+                )}
+              </span>
               <span className="arrow">›</span>
             </li>
           ))}

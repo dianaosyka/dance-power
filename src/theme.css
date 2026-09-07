@@ -537,7 +537,9 @@ input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, .42); }
 .students-page .student-item { display: flex; min-height: 58px; padding: 0 13px 0 10px; align-items: center; justify-content: flex-start; gap: 11px; border-color: rgba(151,235,255,.14); background: rgba(9,5,79,.78); transition: transform .16s, border-color .16s, background .16s; }
 .students-page .student-item:hover { transform: translateY(-1px); border-color: rgba(115,239,248,.48); background: rgba(16,9,102,.94); }
 .students-list-avatar { display: grid; flex: 0 0 37px; width: 37px; height: 37px; place-items: center; border-radius: 11px; background: rgba(39,199,219,.12); color: var(--dp-cyan); font-size: 10px; font-weight: 900; letter-spacing: .04em; }
+.students-list-identity { display: grid; min-width: 0; gap: 3px; }
 .students-list-name { min-width: 0; overflow: hidden; font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.students-list-instagram { overflow: hidden; color: rgba(255,255,255,.58); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .students-page .student-item .arrow { margin-left: auto; color: var(--dp-cyan); font-size: 24px; font-weight: 300; }
 
 @media (max-width: 560px) {
