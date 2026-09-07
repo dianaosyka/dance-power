@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { deleteGroupAndReferences } from '../utils/groupDeletion';
 import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import './GroupDetailsPage.css';
 
@@ -24,7 +25,10 @@ function initials(name) {
 function GroupDetailsPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
-  const { db, groups, groupsLoaded, students, studentsLoaded, studentsLoading, coaches } = useData();
+  const {
+    db, groups, groupsLoaded, students, studentsLoaded, studentsLoading, coaches,
+    removeGroupFromCachedRecords, invalidatePastClasses,
+  } = useData();
   const { user } = useUser();
   const group = groups.find(item => item.id === groupId);
   const [editing, setEditing] = useState(false);
@@ -32,9 +36,14 @@ function GroupDetailsPage() {
   const [coach, setCoach] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState('1');
   const [time, setTime] = useState('');
+  const [type, setType] = useState('CLOSED');
+  const [openingDate, setOpeningDate] = useState('');
+  const [hidden, setHidden] = useState(false);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [changingStudentId, setChangingStudentId] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const deletionInProgress = useRef(false);
   const canManageStudents = user?.role === 'admin' || user?.role === 'coach';
 
   useEffect(() => {
@@ -43,6 +52,9 @@ function GroupDetailsPage() {
     setCoach(group.coach || '');
     setDayOfWeek(String(group.dayOfWeek ?? 1));
     setTime(group.time || '');
+    setType(group.type === 'OPEN' ? 'OPEN' : 'CLOSED');
+    setOpeningDate(group.openingDate || '');
+    setHidden(group.hidden === true);
   }, [group]);
 
   const signedIds = useMemo(
@@ -75,6 +87,9 @@ function GroupDetailsPage() {
         dayOfWeek: weekday,
         time,
         schedule: `${WEEKDAYS[weekday]} ${time}`,
+        type,
+        openingDate: openingDate || null,
+        hidden,
         updatedAt: serverTimestamp(),
         updatedBy: user.id || user.email || '',
       });
@@ -85,6 +100,34 @@ function GroupDetailsPage() {
       alert('❌ Group details could not be saved.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteGroup = async () => {
+    if (user?.role !== 'admin' || !group || deleting || deletionInProgress.current) return;
+    if (!window.confirm(`Delete group ${group.name}? This will also delete all past classes.`)) return;
+    if (window.prompt(`Type DELETE to permanently remove ${group.name}.`) !== 'DELETE') {
+      window.alert('❌ Deletion canceled');
+      return;
+    }
+    deletionInProgress.current = true;
+    setDeleting(true);
+    try {
+      await deleteGroupAndReferences(db, groupId);
+      removeGroupFromCachedRecords(groupId);
+      invalidateSalarySummaries();
+      window.alert('✅ Group deleted');
+      navigate('/groups');
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      invalidatePastClasses(groupId);
+      invalidateSalarySummaries();
+      window.alert(error?.partialCleanupCommitted
+        ? `❌ Group deletion stopped after ${error.committedCleanupOperations} cleanup updates. Refresh and retry to finish deletion.`
+        : '❌ Group deletion failed. Refresh to verify the current state before retrying.');
+    } finally {
+      deletionInProgress.current = false;
+      setDeleting(false);
     }
   };
 
@@ -144,6 +187,11 @@ function GroupDetailsPage() {
               {WEEKDAYS.map((day, index) => <option key={day} value={index}>{day}</option>)}
             </select></label>
             <label>Time<input type="time" value={time} onChange={event => setTime(event.target.value)} required /></label>
+            <label>Type<select value={type} onChange={event => setType(event.target.value)}>
+              <option value="CLOSED">Closed</option><option value="OPEN">Open</option>
+            </select></label>
+            <label>Opening date<input type="date" value={openingDate} onChange={event => setOpeningDate(event.target.value)} /></label>
+            <label className="group-edit-checkbox"><input type="checkbox" checked={hidden} onChange={event => setHidden(event.target.checked)} /><span>Hidden from regular lists</span></label>
             <div className="group-edit-actions">
               <button type="button" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
               <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
@@ -153,6 +201,9 @@ function GroupDetailsPage() {
           <dl className="group-details-summary">
             <div><dt><span aria-hidden="true">◷</span>Schedule</dt><dd>{group?.schedule || '—'}</dd></div>
             <div><dt><span aria-hidden="true" className="coach-person-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.25" /><path d="M5.5 19c.7-3.2 3-5 6.5-5s5.8 1.8 6.5 5" /></svg></span>Coach</dt><dd>{coaches.find(item => item.id === group?.coach)?.name || '—'}</dd></div>
+            <div><dt>Type</dt><dd>{group?.type === 'OPEN' ? 'Open' : 'Closed'}</dd></div>
+            <div><dt>Opening date</dt><dd>{group?.openingDate || '—'}</dd></div>
+            <div><dt>Visibility</dt><dd>{group?.hidden === true ? 'Hidden' : 'Visible'}</dd></div>
           </dl>
         )}
       </section>
@@ -203,6 +254,14 @@ function GroupDetailsPage() {
           ))}
         </ul>
       </section>
+
+      {user?.role === 'admin' && (
+        <section className="group-details-card group-danger-zone">
+          <div><p className="section-kicker">DANGER ZONE</p><h2>Delete group</h2></div>
+          <p>This permanently deletes the group and its past classes, and removes its links from students and payments.</p>
+          <button type="button" onClick={deleteGroup} disabled={deleting || saving}>{deleting ? 'Deleting…' : 'Delete group'}</button>
+        </section>
+      )}
     </main>
   );
 }

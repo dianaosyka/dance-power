@@ -871,7 +871,7 @@ function AddPaymentPage() {
 
       <GradientActionButton
         wide
-        icon={isSubmitting || studentsLoading ? '…' : '+'}
+        icon={isSubmitting || studentsLoading ? '…' : '✓'}
         onClick={handleSubmit}
         disabled={
           isSubmitting ||

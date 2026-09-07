@@ -20,6 +20,15 @@ function PageBackButton() {
   }
 
   const goBack = () => {
+    if (/^\/group\/[^/]+\/?$/.test(pathname)) {
+      navigate('/groups');
+      return;
+    }
+    const classMatch = pathname.match(/^\/group\/([^/]+)\/class\/[^/]+\/?$/);
+    if (classMatch) {
+      navigate(`/group/${classMatch[1]}`);
+      return;
+    }
     if (window.history.length > 1) {
       navigate(-1);
       return;

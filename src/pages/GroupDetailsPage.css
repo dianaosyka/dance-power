@@ -28,18 +28,15 @@
 .group-details-page::after { bottom: 80px; left: -145px; }
 
 .group-details-header {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 10;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 12px;
-  margin: -18px -16px 20px;
+  margin: -18px -16px 32px;
   padding: 17px 16px 14px;
-  background: rgba(74, 0, 121, .76);
-  border-bottom: 1px solid rgba(255, 255, 255, .09);
-  backdrop-filter: blur(18px);
+  background: transparent;
 }
 .group-details-header > div { min-width: 0; text-align: center; }
 .group-details-header p,
@@ -99,6 +96,11 @@
 .group-edit-actions button { min-height: 42px; border: 0; border-radius: 11px; font-weight: 800; cursor: pointer; }
 .group-edit-actions button:first-child { background: #eee8f1; color: #765f81; }
 .group-edit-actions button:last-child { background: linear-gradient(135deg, #6b2098, #43106d); color: white; box-shadow: 0 7px 16px rgba(72, 15, 107, .18); }
+.group-edit-form .group-edit-checkbox { display: flex; align-items: center; gap: 10px; padding: 8px 1px; }
+.group-edit-form .group-edit-checkbox input { width: 18px; height: 18px; accent-color: #dc1b9f; }
+.group-danger-zone { border-color: rgba(255, 98, 186, .35); }
+.group-danger-zone p:not(.section-kicker) { margin: 9px 0 15px; color: #ffffff88; font-size: 12px; line-height: 1.5; }
+.group-danger-zone button { min-height: 42px; padding: 0 16px; border: 1px solid #ff62ba66; border-radius: 11px; background: #ff3c8e18; color: #ff9dd1; font-weight: 800; cursor: pointer; }
 
 .signed-student-list,
 .available-student-list { margin: 0; padding: 0; list-style: none; }
@@ -149,8 +151,7 @@
   background: transparent;
 }
 .group-details-header {
-  background: rgba(18, 10, 104, .82);
-  border-bottom-color: rgba(155, 239, 255, .13);
+  background: transparent;
 }
 .group-details-header p,
 .group-details-card .section-kicker { color: #7cecf8; }

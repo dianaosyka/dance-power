@@ -1,15 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  collection,
-  getDocsFromServer,
   doc,
   runTransaction,
   Timestamp,
-  writeBatch,
-  arrayRemove,
-  query,
-  where,
 } from 'firebase/firestore';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
@@ -73,105 +67,6 @@ function mapPastClassDocs(docs) {
     .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date));
 }
 
-const MAX_ATOMIC_BATCH_OPERATIONS = 500;
-const SAFE_BATCH_CHUNK_SIZE = 450;
-const MAX_GROUP_DELETION_RECONCILIATION_PASSES = 5;
-
-async function readGroupCleanupOperations(db, groupId) {
-  const pastClassesRef = collection(db, `groups/${groupId}/pastClasses`);
-  const affectedStudentsQuery = query(
-    collection(db, 'students'),
-    where('groups', 'array-contains', groupId)
-  );
-  const affectedPaymentsQuery = query(
-    collection(db, 'payments'),
-    where('groups', 'array-contains', groupId)
-  );
-  const [pastClassesSnap, studentsSnap, paymentsSnap] = await Promise.all([
-    getDocsFromServer(pastClassesRef),
-    getDocsFromServer(affectedStudentsQuery),
-    getDocsFromServer(affectedPaymentsQuery),
-  ]);
-
-  const cleanupOperations = [];
-  pastClassesSnap.forEach((classDoc) => {
-    cleanupOperations.push(batch => batch.delete(classDoc.ref));
-  });
-  studentsSnap.forEach((studentDoc) => {
-    cleanupOperations.push(batch => batch.update(studentDoc.ref, {
-      groups: arrayRemove(groupId),
-    }));
-  });
-  paymentsSnap.forEach((paymentDoc) => {
-    cleanupOperations.push(batch => batch.update(paymentDoc.ref, {
-      groups: arrayRemove(groupId),
-    }));
-  });
-
-  return cleanupOperations;
-}
-
-async function commitCleanupChunks(db, cleanupOperations, onChunkCommitted) {
-  for (let index = 0; index < cleanupOperations.length; index += SAFE_BATCH_CHUNK_SIZE) {
-    const operations = cleanupOperations.slice(index, index + SAFE_BATCH_CHUNK_SIZE);
-    const batch = writeBatch(db);
-    operations.forEach(applyOperation => applyOperation(batch));
-    await batch.commit();
-    onChunkCommitted(operations.length);
-  }
-}
-
-async function commitGroupDeletion(db, groupId, cleanupOperations, groupRef) {
-  if (cleanupOperations.length + 1 <= MAX_ATOMIC_BATCH_OPERATIONS) {
-    const batch = writeBatch(db);
-    cleanupOperations.forEach(applyOperation => applyOperation(batch));
-    batch.delete(groupRef);
-    await batch.commit();
-    return;
-  }
-
-  // A cleanup larger than Firestore's atomic batch limit necessarily spans
-  // commits. Keep the group document until fresh server queries find a final
-  // set small enough to clean up atomically with the group deletion. This also
-  // catches references/classes created while an earlier chunk was committing.
-  let committedCleanupOperations = 0;
-  const recordCommittedOperations = committedCount => {
-    committedCleanupOperations += committedCount;
-  };
-
-  try {
-    await commitCleanupChunks(db, cleanupOperations, recordCommittedOperations);
-
-    for (
-      let pass = 0;
-      pass < MAX_GROUP_DELETION_RECONCILIATION_PASSES;
-      pass += 1
-    ) {
-      const remainingOperations = await readGroupCleanupOperations(db, groupId);
-
-      if (remainingOperations.length + 1 <= MAX_ATOMIC_BATCH_OPERATIONS) {
-        const finalBatch = writeBatch(db);
-        remainingOperations.forEach(applyOperation => applyOperation(finalBatch));
-        finalBatch.delete(groupRef);
-        await finalBatch.commit();
-        return;
-      }
-
-      await commitCleanupChunks(db, remainingOperations, recordCommittedOperations);
-    }
-
-    throw new Error(
-      'The group kept receiving new references while deletion was running.'
-    );
-  } catch (error) {
-    const deletionError = new Error(error?.message || String(error));
-    deletionError.cause = error;
-    deletionError.partialCleanupCommitted = committedCleanupOperations > 0;
-    deletionError.committedCleanupOperations = committedCleanupOperations;
-    throw deletionError;
-  }
-}
-
 // Only inspect a short recent window. This catches forgotten lessons without
 // making old data from before the app was introduced appear as unfinished.
 function getRecentExpectedDates(weekday, count = 4) {
@@ -199,10 +94,8 @@ function GroupClassesPage() {
     coaches,
     loadPastClassDocs,
     updateCachedClass,
-    invalidatePastClasses,
     scheduleCache,
     coachTasksCache,
-    removeGroupFromCachedRecords,
   } = useData();
   const { user } = useUser();
 
@@ -227,9 +120,7 @@ function GroupClassesPage() {
   // guards
   const [isToggling, setIsToggling] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const pastClassLoadGeneration = useRef(0);
-  const groupDeletionInProgress = useRef(false);
   const canManageClasses = user?.role === 'admin' || user?.role === 'coach';
 
   const warnings = useMemo(() => {
@@ -460,69 +351,6 @@ function GroupClassesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group, requestedAddClassDate, requestedCoachId]);
 
-  const handleDeleteGroup = async () => {
-    if (
-      user?.role !== 'admin' ||
-      !groupId ||
-      !group ||
-      isDeletingGroup ||
-      groupDeletionInProgress.current
-    ) return;
-
-    if (!window.confirm(`Delete group ${group.name}? This will also delete all past classes.`)) {
-      return;
-    }
-
-    const second = prompt(`Type DELETE to permanently remove ${group.name}.`);
-    if (second !== 'DELETE') {
-      alert('❌ Deletion canceled');
-      return;
-    }
-
-    groupDeletionInProgress.current = true;
-    setIsDeletingGroup(true);
-
-    try {
-      const cleanupOperations = await readGroupCleanupOperations(db, groupId);
-
-      await commitGroupDeletion(
-        db,
-        groupId,
-        cleanupOperations,
-        doc(db, 'groups', groupId)
-      );
-      removeGroupFromCachedRecords(groupId);
-      invalidateSalarySummaries();
-
-      alert('✅ Group deleted');
-      navigate('/groups');
-    } catch (err) {
-      console.error('Error deleting group:', err);
-      // A failed multi-batch deletion can still have committed some cleanup
-      // writes. Drop derived caches so those writes are never hidden behind a
-      // locally "fresh" class/task/salary result.
-      invalidatePastClasses(groupId);
-      invalidateReadCache(scheduleCache);
-      invalidateReadCache(coachTasksCache);
-      invalidateSalarySummaries();
-      if (err?.partialCleanupCommitted) {
-        alert(
-          `❌ Group deletion stopped after ${err.committedCleanupOperations} cleanup ` +
-          'updates/deletions were already committed. This client could not confirm the ' +
-          'final group deletion, so some class records or group links may already ' +
-          'be removed. Refresh, verify the group, and retry to finish reconciliation.'
-        );
-      } else {
-        alert(
-          '❌ Group deletion failed before this client confirmed any cleanup write. ' +
-          'Refresh to verify the current server state before retrying.'
-        );
-      }
-    } finally {
-      groupDeletionInProgress.current = false;
-      setIsDeletingGroup(false);
-    }
-  };
 
   return (
     <div className="group-page">
@@ -662,17 +490,6 @@ function GroupClassesPage() {
           </li>
         ))}
       </ul>
-      {user?.role === 'admin' && (
-        <button
-          className="delete-group-button"
-          onClick={handleDeleteGroup}
-          disabled={isDeletingGroup}
-          title={isDeletingGroup ? 'Deleting group…' : 'Delete group'}
-        >
-          {isDeletingGroup ? 'Deleting group…' : 'DELETE GROUP'}
-        </button>
-      )}
-
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-box">
