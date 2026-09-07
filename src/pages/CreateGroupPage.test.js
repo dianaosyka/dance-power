@@ -74,6 +74,9 @@ function fillRegularGroupForm() {
   fireEvent.change(screen.getByLabelText('Time'), {
     target: { value: '18:30' },
   });
+  fireEvent.change(screen.getByLabelText('Opening date'), {
+    target: { value: '2026-09-08' },
+  });
 }
 
 function fillProjectForm() {
@@ -160,6 +163,7 @@ describe('CreateGroupPage', () => {
         dayOfWeek: 2,
         time: '18:30',
         schedule: 'TUESDAY 18:30',
+        openingDate: '2026-09-08',
         coach: 'coach-2',
         signedStudents: [],
         hidden: true,

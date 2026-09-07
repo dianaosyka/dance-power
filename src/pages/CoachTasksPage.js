@@ -42,6 +42,14 @@ function parseDate(dateStr) {
   return new Date(yyyy, mm - 1, dd);
 }
 
+function isOnOrAfterOpeningDate(dateStr, openingDate) {
+  if (!openingDate) return true;
+  const [year, month, day] = openingDate.split('-').map(Number);
+  const opening = new Date(year, month - 1, day);
+  if (Number.isNaN(opening.getTime())) return true;
+  return parseDate(dateStr) >= opening;
+}
+
 function getRecentExpectedDates(weekday) {
   const dates = [];
   const cursor = new Date();
@@ -270,7 +278,9 @@ function CoachTasksPage({ includeAllWarnings = false }) {
         });
 
         const recentChecks = activeGroups.map(async group => {
-          const expectedDates = getRecentExpectedDates(group.dayOfWeek ?? 5);
+          const expectedDates = getRecentExpectedDates(group.dayOfWeek ?? 5)
+            .filter(date => isOnOrAfterOpeningDate(date, group.openingDate));
+          if (expectedDates.length === 0) return [];
           const oldestExpectedDate = parseDate(expectedDates[expectedDates.length - 1]);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -324,6 +334,7 @@ function CoachTasksPage({ includeAllWarnings = false }) {
         today.setHours(0, 0, 0, 0);
 
         results.forEach(({ group, date, classItem }) => {
+          if (!isOnOrAfterOpeningDate(date, group.openingDate)) return;
           const regularCoach = isRegularCoach(group, user, allWarningsEnabled);
 
           if (!classItem) {
@@ -350,6 +361,7 @@ function CoachTasksPage({ includeAllWarnings = false }) {
 
         replacementResultsByGroup.flat().forEach(({ group, date, status }) => {
           if (status === 'confirmed') return;
+          if (!isOnOrAfterOpeningDate(date, group.openingDate)) return;
           const groupId = group.id;
           const type = status === 'denied' ? 'replacement-denied' : 'replacement';
           warningByKey.set(`${type}-${groupId}-${date}`, {

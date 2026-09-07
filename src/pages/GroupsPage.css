@@ -221,6 +221,34 @@
   padding-bottom: 16px;
 }
 
+.create-regular-group-container {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0 14px;
+}
+
+.create-regular-group-button {
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.create-regular-group-button:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.create-regular-group-button:focus-visible {
+  outline: 2px solid #65efff;
+  outline-offset: 2px;
+}
+
 .hidden-toggle-button {
   background-color: transparent;
   color: #ccc;

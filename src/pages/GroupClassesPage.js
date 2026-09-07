@@ -35,6 +35,14 @@ function parseDateStr(dateStr) {
   return new Date(yyyy, mm - 1, dd);
 }
 
+function isOnOrAfterOpeningDate(dateStr, openingDate) {
+  if (!openingDate) return true;
+  const [year, month, day] = openingDate.split('-').map(Number);
+  const opening = new Date(year, month - 1, day);
+  if (Number.isNaN(opening.getTime())) return true;
+  return parseDateStr(dateStr) >= opening;
+}
+
 const ATTENDANCE_TRACKING_START = new Date(2026, 5, 1);
 
 function isAttendanceComplete(classItem) {
@@ -127,7 +135,9 @@ function GroupClassesPage() {
     if (!group || group.hidden === true || !pastClassesLoaded) return [];
 
     const classByDate = new Map(pastDates.map(item => [item.date, item]));
-    const missingWarnings = getRecentExpectedDates(group.dayOfWeek ?? 5).flatMap(date => {
+    const expectedDates = getRecentExpectedDates(group.dayOfWeek ?? 5)
+      .filter(date => isOnOrAfterOpeningDate(date, group.openingDate));
+    const missingWarnings = expectedDates.flatMap(date => {
       const classItem = classByDate.get(date);
 
       if (!classItem) {
@@ -142,6 +152,7 @@ function GroupClassesPage() {
       .filter(classItem => (
         !classItem.canceled &&
         !isAttendanceComplete(classItem) &&
+        isOnOrAfterOpeningDate(classItem.date, group.openingDate) &&
         parseDateStr(classItem.date) < today
       ))
       .map(classItem => ({

@@ -57,6 +57,7 @@ function CreateGroupPage() {
   const [regularType, setRegularType] = useState('CLOSED');
   const [regularDay, setRegularDay] = useState('1');
   const [regularTime, setRegularTime] = useState('');
+  const [regularOpeningDate, setRegularOpeningDate] = useState('');
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -194,6 +195,7 @@ function CreateGroupPage() {
           dayOfWeek,
           time: regularTime,
           schedule: `${WEEKDAYS[dayOfWeek]} ${regularTime}`,
+          openingDate: regularOpeningDate || null,
           coach: coachId,
           signedStudents: [],
           hidden,
@@ -382,6 +384,16 @@ function CreateGroupPage() {
                   {errors.schedule}
                 </small>
               )}
+
+              <label>
+                <span>Opening date</span>
+                <input
+                  type="date"
+                  value={regularOpeningDate}
+                  onChange={event => setRegularOpeningDate(event.target.value)}
+                  disabled={isSubmitting}
+                />
+              </label>
             </section>
           ) : (
             <>

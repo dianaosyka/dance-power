@@ -133,6 +133,20 @@ function GroupsPage() {
 
         {openGroups.length > 0 && renderGroupSection('OPEN CLASSES', openGroups)}
         {closedGroups.length > 0 && renderGroupSection('CLOSED GROUPS', closedGroups, 'closed')}
+
+        {user?.role === 'admin' && (
+          <div className="create-regular-group-container">
+            <button
+              type="button"
+              className="create-regular-group-button"
+              aria-label="Create regular group"
+              onClick={() => navigate('/create-group?kind=regular')}
+            >
+              <span aria-hidden="true">＋</span> Create regular group
+            </button>
+          </div>
+        )}
+
         {user?.role === 'admin' && showHiddenGroups && hiddenGroups.length > 0 && renderGroupSection('HIDDEN GROUPS', hiddenGroups, 'hidden')}
 
         {user?.role === 'admin' && hiddenGroups.length > 0 && (
