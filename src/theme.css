@@ -436,7 +436,14 @@ input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, .42); }
 .login-title { margin-bottom: 28px; text-align: center; }
 .login-page .button-group { display: grid; gap: 10px; }
 .login-page button { min-height: 46px; border: 1px solid var(--dp-line); border-radius: 12px; background: var(--dp-panel); color: #fff; font-weight: 800; }
-.login-page .button-group button:first-child, .login-page .confirm-button { background: linear-gradient(105deg, #27c7db, #7866dc 48%, #dc1b9f); }
+.login-page .button-group button:first-child,
+.login-page .confirm-button {
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(105deg, #27c7db, #7866dc 48%, #dc1b9f) padding-box,
+    linear-gradient(90deg, #73eff8, #ff55cf) border-box;
+}
 .login-page .form-row label { margin-bottom: 7px; color: var(--dp-muted); font-size: 12px; font-weight: 700; }
 
 /* Dialogs and shared status */

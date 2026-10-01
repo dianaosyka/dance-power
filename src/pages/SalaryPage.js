@@ -4,6 +4,8 @@ import {
   doc,
   getDocFromServer,
   getDocsFromServer,
+  serverTimestamp,
+  setDoc,
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { STAFF_DATA_CACHE_TTL_MS, useData } from '../context/firebase';
@@ -24,6 +26,12 @@ import {
 } from '../utils/projectSalaryUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import { getWorkshopSalary, getWorkshopMonth } from '../utils/workshopUtils';
+import {
+  canCoachChangeSalaryStatus,
+  canMarkSalaryPaid,
+  getSalaryMonthDocumentId,
+  SALARY_STATUS,
+} from '../utils/salaryWorkflow';
 import './SalaryPage.css';
 
 function getCurrentMonthValue() {
@@ -181,6 +189,11 @@ function SalaryPage() {
   const [summaryIsStale, setSummaryIsStale] = useState(false);
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
+  const [salaryRecords, setSalaryRecords] = useState([]);
+  const [, setWorkflowLoading] = useState(false);
+  const [updatingSalaryCoachId, setUpdatingSalaryCoachId] = useState(null);
+  const [workflowError, setWorkflowError] = useState('');
+  const salaryRecordsRef = useRef([]);
   const calculationInProgress = useRef(false);
   const calculationToken = useRef(0);
 
@@ -194,6 +207,145 @@ function SalaryPage() {
   );
   const activeSalaryKey = useRef(salarySummaryStorageKey);
   activeSalaryKey.current = salarySummaryStorageKey;
+
+  const salaryMonthDocumentId = useMemo(
+    () => getSalaryMonthDocumentId(selectedMonth),
+    [selectedMonth]
+  );
+
+  const replaceSalaryRecords = useCallback((nextOrUpdater) => {
+    const next = typeof nextOrUpdater === 'function'
+      ? nextOrUpdater(salaryRecordsRef.current)
+      : nextOrUpdater;
+    salaryRecordsRef.current = next;
+    setSalaryRecords(next);
+  }, []);
+
+  const loadSalaryRecords = useCallback(async () => {
+    if (!salaryMonthDocumentId || (!isAdmin && !isCoach)) return;
+    setWorkflowLoading(true);
+    setWorkflowError('');
+    try {
+      const snapshot = await getDocsFromServer(
+        collection(db, 'salary', salaryMonthDocumentId, 'coaches')
+      );
+      const records = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+      replaceSalaryRecords(isCoach
+        ? records.filter(record => record.id === user.id)
+        : records);
+    } catch (err) {
+      console.error('Failed to load salary workflow:', err);
+      setWorkflowError('Failed to load salary confirmation status.');
+    } finally {
+      setWorkflowLoading(false);
+    }
+  }, [db, isAdmin, isCoach, replaceSalaryRecords, salaryMonthDocumentId, user?.id]);
+
+  useEffect(() => {
+    replaceSalaryRecords([]);
+    loadSalaryRecords();
+  }, [loadSalaryRecords, replaceSalaryRecords]);
+
+  const saveSalarySnapshot = useCallback(async (salarySummary) => {
+    if (!salaryMonthDocumentId || !salarySummary) return;
+    const monthRef = doc(db, 'salary', salaryMonthDocumentId);
+    await setDoc(monthRef, {
+      month: salaryMonthDocumentId,
+      monthValue: selectedMonth,
+      updatedAt: serverTimestamp(),
+      ...(isAdmin ? {
+        grossTotal: Number(salarySummary.grossTotal || 0),
+        coachesTotal: Number(salarySummary.coachesTotal || 0),
+        earnedTotal: Number(salarySummary.earnedTotal || 0),
+      } : {}),
+    }, { merge: true });
+
+    const coachRows = isCoach
+      ? [salarySummary.myCoachTotal]
+      : salarySummary.coachTotals;
+    await Promise.all(coachRows.filter(row => row?.id).map(row => setDoc(
+      doc(monthRef, 'coaches', row.id),
+      {
+        coachId: row.id,
+        coachName: row.name || row.id,
+        amount: Number(row.salary || 0),
+        classes: Number(row.classes || 0),
+        students: Number(row.students || 0),
+        calculatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )));
+    await loadSalaryRecords();
+  }, [db, isAdmin, isCoach, loadSalaryRecords, salaryMonthDocumentId, selectedMonth]);
+
+  const updateSalaryStatus = useCallback(async (coachId, status, issue = '') => {
+    if (!salaryMonthDocumentId || !coachId || updatingSalaryCoachId) return;
+    const previousRecords = salaryRecordsRef.current;
+    const existingRecord = previousRecords.find(record => record.id === coachId);
+    const existingStatus = existingRecord?.status || SALARY_STATUS.PENDING;
+    if (isCoach && !canCoachChangeSalaryStatus(existingStatus)) return;
+    const summaryCoach = isCoach
+      ? summary?.myCoachTotal
+      : summary?.coachTotals?.find(coach => coach.id === coachId);
+    const optimisticRecord = {
+      ...(existingRecord || {}),
+      id: coachId,
+      coachId,
+      coachName: existingRecord?.coachName || summaryCoach?.name || coachNames.get(coachId) || coachId,
+      amount: Number(existingRecord?.amount ?? summaryCoach?.salary ?? 0),
+      classes: Number(existingRecord?.classes ?? summaryCoach?.classes ?? 0),
+      students: Number(existingRecord?.students ?? summaryCoach?.students ?? 0),
+      status,
+      issue: status === SALARY_STATUS.NEEDS_REVIEW ? issue.trim() : '',
+    };
+
+    setUpdatingSalaryCoachId(coachId);
+    setWorkflowError('');
+    replaceSalaryRecords(current => {
+      const index = current.findIndex(record => record.id === coachId);
+      if (index < 0) return [...current, optimisticRecord];
+      const next = [...current];
+      next[index] = optimisticRecord;
+      return next;
+    });
+    try {
+      const recordRef = doc(db, 'salary', salaryMonthDocumentId, 'coaches', coachId);
+      const update = {
+        status,
+        issue: status === SALARY_STATUS.NEEDS_REVIEW ? issue.trim() : '',
+        updatedAt: serverTimestamp(),
+      };
+      if (status === SALARY_STATUS.PAID) {
+        update.paidAt = serverTimestamp();
+        update.paidBy = user.id || 'admin';
+      } else {
+        update.reviewedAt = serverTimestamp();
+        update.reviewedBy = user.id;
+      }
+      await setDoc(recordRef, update, { merge: true });
+    } catch (err) {
+      console.error('Failed to update salary status:', err);
+      replaceSalaryRecords(previousRecords);
+      setWorkflowError('Failed to update salary status. Please try again.');
+    } finally {
+      setUpdatingSalaryCoachId(null);
+    }
+  }, [
+    coachNames,
+    db,
+    isCoach,
+    replaceSalaryRecords,
+    salaryMonthDocumentId,
+    summary,
+    updatingSalaryCoachId,
+    user?.id,
+  ]);
+
+  const reportSalaryIssue = useCallback(() => {
+    const note = window.prompt('What does not match? Add a short note for the admin:');
+    if (note === null) return;
+    updateSalaryStatus(user.id, SALARY_STATUS.NEEDS_REVIEW, note);
+  }, [updateSalaryStatus, user?.id]);
 
   useEffect(() => () => {
     calculationToken.current += 1;
@@ -590,6 +742,7 @@ function SalaryPage() {
       if (runSalaryKey) {
         localStorage.setItem(runSalaryKey, JSON.stringify(nextSummary));
       }
+      await saveSalarySnapshot(nextSummary);
     } catch (err) {
       console.error('Failed to calculate salary:', err);
       if (
@@ -621,6 +774,7 @@ function SalaryPage() {
     payments,
     pastClassesByGroup,
     salarySummaryStorageKey,
+    saveSalarySnapshot,
     selectedMonth,
     students,
     studentsLoaded,
@@ -806,19 +960,54 @@ function SalaryPage() {
           )}
 
           <h3 className="salary-heading">{isAdmin ? 'COACHES' : 'MY SALARY'}</h3>
+          {workflowError && <p className="salary-workflow-error">{workflowError}</p>}
           <ul className="salary-list">
             {summary.coachTotals.length === 0 ? (
               <li className="salary-row">
                 {isAdmin ? 'No coach salary in this month.' : 'No salary in this month.'}
               </li>
             ) : (
-              summary.coachTotals.map(coach => (
-                <li key={coach.id} className="salary-row">
-                  <span>{coach.name}</span>
-                  <span>{coach.classes} classes</span>
-                  <strong>{coach.salary.toFixed(2)}€</strong>
-                </li>
-              ))
+              summary.coachTotals.map(coach => {
+                const record = salaryRecords.find(item => item.id === coach.id);
+                const status = record?.status || SALARY_STATUS.PENDING;
+                return (
+                  <li key={coach.id} className={`salary-row salary-coach-row status-${status}`}>
+                    <div className="salary-coach-row-main">
+                      <div className="salary-coach-identity">
+                        <strong>{coach.name}</strong>
+                        {record?.issue && <span className="salary-coach-issue">⚠ {record.issue}</span>}
+                      </div>
+                      <span>{coach.classes} classes</span>
+                      <strong>{coach.salary.toFixed(2)}€</strong>
+                      <div className="salary-coach-state">
+                        {isAdmin && canMarkSalaryPaid(status) && (
+                          <button type="button" className="salary-inline-paid-button" disabled={updatingSalaryCoachId === coach.id} onClick={() => updateSalaryStatus(coach.id, SALARY_STATUS.PAID)}>
+                            {updatingSalaryCoachId === coach.id ? 'Saving…' : 'Mark paid'}
+                          </button>
+                        )}
+                        {status === SALARY_STATUS.PAID && <span className="salary-inline-paid">✓ Paid</span>}
+                        {isAdmin && status === SALARY_STATUS.NEEDS_REVIEW && <span className="salary-inline-review">Needs review</span>}
+                      </div>
+                    </div>
+                    {isCoach && canCoachChangeSalaryStatus(status) && (
+                      <div className="salary-workflow-actions">
+                        <button type="button" className="salary-confirm-button" disabled={updatingSalaryCoachId === user.id} onClick={() => updateSalaryStatus(user.id, SALARY_STATUS.APPROVED)}>
+                          {updatingSalaryCoachId === user.id
+                            ? 'Saving…'
+                            : status === SALARY_STATUS.NEEDS_REVIEW
+                              ? 'Everything matches now'
+                              : 'Everything matches'}
+                        </button>
+                        <button type="button" className="salary-review-button" disabled={updatingSalaryCoachId === user.id} onClick={reportSalaryIssue}>
+                          {status === SALARY_STATUS.NEEDS_REVIEW ? 'Still something is wrong' : 'Something is wrong'}
+                        </button>
+                      </div>
+                    )}
+                    {isCoach && status === SALARY_STATUS.APPROVED && <span className="salary-coach-approved">✓ Everything is correct</span>}
+                    {isCoach && status === SALARY_STATUS.PAID && <span className="salary-coach-approved">✓ Paid</span>}
+                  </li>
+                );
+              })
             )}
           </ul>
 

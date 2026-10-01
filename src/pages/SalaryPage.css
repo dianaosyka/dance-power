@@ -28,6 +28,29 @@
   margin-bottom: 20px;
 }
 
+.salary-workflow-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.salary-workflow-actions button {
+  flex: 1;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #180526;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.salary-confirm-button { background: #62e08a; }
+.salary-review-button { background: #ffcc00; }
+.salary-workflow-error { color: #ff9b9b; font-size: 12px; }
+
 .salary-label {
   font-size: 12px;
   font-weight: bold;
@@ -113,6 +136,97 @@
   padding: 10px 0;
   border-bottom: 1px solid #9b59b6;
   font-size: 14px;
+}
+
+.salary-coach-row {
+  display: block;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-left: 4px solid transparent;
+}
+
+.salary-page > ul.salary-list > li.salary-row.salary-coach-row {
+  min-height: 0;
+  padding: 14px 12px 18px;
+}
+
+.salary-page > ul.salary-list > li.salary-row.salary-coach-row.status-needs_review {
+  width: calc(100% + 28px);
+  margin-right: -14px;
+  margin-left: -14px;
+  padding-right: 26px;
+  padding-left: 26px;
+  border-left-color: #ffd400;
+  background: linear-gradient(90deg, rgba(255, 212, 0, .3), rgba(255, 212, 0, .18));
+}
+
+.salary-coach-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 32px;
+}
+
+.salary-coach-identity {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.salary-coach-identity > strong {
+  font-weight: 500;
+}
+
+.salary-coach-issue {
+  color: #ffe680 !important;
+  font-size: 11px !important;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.salary-coach-state:empty {
+  display: none;
+}
+
+.salary-inline-paid-button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: #62e08a;
+  color: #183522;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.salary-inline-paid,
+.salary-inline-review,
+.salary-coach-approved {
+  font-size: 10px !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.salary-inline-paid,
+.salary-coach-approved { color: #8ef5aa !important; }
+.salary-inline-review { color: #ffe680 !important; }
+
+.salary-coach-approved {
+  display: block;
+  margin-top: 9px;
+}
+
+@media (max-width: 560px) {
+  .salary-coach-row-main {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .salary-coach-state {
+    grid-column: 1 / -1;
+    padding-bottom: 8px;
+  }
 }
 
 .salary-coach-lessons {
