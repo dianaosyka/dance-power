@@ -4,6 +4,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import CoachTasksPage from './CoachTasksPage';
 import GradientActionButton from '../components/GradientActionButton';
+import SalaryDeadlineWarnings from '../components/SalaryDeadlineWarnings';
 import './GroupsPage.css';
 
 function GroupsPage() {
@@ -115,7 +116,10 @@ function GroupsPage() {
         </div>
 
         {(user?.role === 'admin' || user?.role === 'coach') && (
-          <CoachTasksPage includeAllWarnings={includeAllWarnings} />
+          <>
+            <SalaryDeadlineWarnings />
+            <CoachTasksPage includeAllWarnings={includeAllWarnings} />
+          </>
         )}
 
         {(user?.role === 'admin' || user?.role === 'coach') && (
