@@ -103,7 +103,57 @@ function getNormalizedScheduleSlots(scheduleSlots) {
   ));
 }
 
+function normalizeCustomSession(session) {
+  const date = parseLocalIsoDate(session?.date);
+  const time = typeof session?.time === 'string' ? session.time.trim() : '';
+  if (!date || !TIME_PATTERN.test(time)) return null;
+
+  return {
+    isoDate: formatLocalIsoDate(date),
+    date: formatProjectDate(date),
+    time,
+    dayOfWeek: date.getDay(),
+  };
+}
+
+function getNormalizedCustomSchedule(customSchedule) {
+  if (!Array.isArray(customSchedule)) return [];
+
+  return customSchedule
+    .map(normalizeCustomSession)
+    .filter(Boolean)
+    .sort((first, second) => (
+      first.isoDate.localeCompare(second.isoDate) || first.time.localeCompare(second.time)
+    ));
+}
+
+export function getProjectSessionKey(session) {
+  const isoDate = String(session?.isoDate || session?.date || '').trim();
+  const time = String(session?.time || '').trim();
+  return isoDate && time ? `${isoDate}--${time}` : '';
+}
+
+function withProjectReplacement(project, session) {
+  const sessionKey = getProjectSessionKey(session);
+  const replacementCoach = sessionKey
+    ? project?.coachReplacements?.[sessionKey]
+    : '';
+  return replacementCoach ? { ...session, replacementCoach } : session;
+}
+
 export function generateProjectSchedule(project) {
+  if (
+    project?.scheduleMode === 'custom' ||
+    (Array.isArray(project?.customSchedule) && project.customSchedule.length > 0)
+  ) {
+    return getNormalizedCustomSchedule(project?.customSchedule).map((session, index) => (
+      withProjectReplacement(project, {
+        index: index + 1,
+        ...session,
+      })
+    ));
+  }
+
   const startDate = parseLocalIsoDate(project?.startDate);
   const endDate = parseLocalIsoDate(project?.endDate);
   const totalClasses = normalizeClassCount(project?.totalClasses);
@@ -152,10 +202,36 @@ export function generateProjectSchedule(project) {
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  return sessions;
+  return sessions.map(session => withProjectReplacement(project, session));
 }
 
 export function validateProjectSchedule(project) {
+  if (
+    project?.scheduleMode === 'custom' ||
+    (Array.isArray(project?.customSchedule) && project.customSchedule.length > 0)
+  ) {
+    const totalClasses = normalizeClassCount(project?.totalClasses);
+    if (totalClasses === null) {
+      return 'Project must have a positive whole number of classes.';
+    }
+    if (!Array.isArray(project?.customSchedule) || project.customSchedule.length !== totalClasses) {
+      return `Add a date and time for all ${totalClasses} classes.`;
+    }
+
+    const normalizedSessions = project.customSchedule.map(normalizeCustomSession);
+    if (normalizedSessions.some(session => session === null)) {
+      return 'Every class needs a valid date and time.';
+    }
+
+    const uniqueSessionKeys = new Set(
+      normalizedSessions.map(session => `${session.isoDate}:${session.time}`)
+    );
+    if (uniqueSessionKeys.size !== normalizedSessions.length) {
+      return 'Custom class dates and times must be unique.';
+    }
+    return '';
+  }
+
   const startDate = parseLocalIsoDate(project?.startDate);
   if (!startDate) return 'Please choose a valid project start date.';
 

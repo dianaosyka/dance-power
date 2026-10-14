@@ -48,8 +48,13 @@ function CreateGroupPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const requestedKind = new URLSearchParams(location.search).get('kind');
+  const isAdmin = user?.role === 'admin';
+  const isCoach = user?.role === 'coach';
+  const isStaff = isAdmin || isCoach;
 
-  const [kind, setKind] = useState(requestedKind === 'project' ? 'project' : 'regular');
+  const [kind, setKind] = useState(
+    requestedKind === 'project' || isCoach ? 'project' : 'regular'
+  );
   const [name, setName] = useState('');
   const [coachId, setCoachId] = useState('');
   const [hidden, setHidden] = useState(false);
@@ -65,6 +70,7 @@ function CreateGroupPage() {
   const [price, setPrice] = useState('');
   const [frequency, setFrequency] = useState('1');
   const [scheduleSlots, setScheduleSlots] = useState(EMPTY_SLOTS);
+  const [customSchedule, setCustomSchedule] = useState([]);
 
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
@@ -81,7 +87,7 @@ function CreateGroupPage() {
   );
 
   const activeScheduleSlots = useMemo(
-    () => scheduleSlots.slice(0, Number(frequency)).map(slot => ({
+    () => frequency === 'custom' ? [] : scheduleSlots.slice(0, Number(frequency)).map(slot => ({
       dayOfWeek: Number(slot.dayOfWeek),
       time: slot.time,
     })),
@@ -93,19 +99,28 @@ function CreateGroupPage() {
     endDate,
     totalClasses,
     scheduleSlots: activeScheduleSlots,
-  }), [activeScheduleSlots, endDate, startDate, totalClasses]);
+    scheduleMode: frequency === 'custom' ? 'custom' : 'weekly',
+    customSchedule: frequency === 'custom' ? customSchedule : undefined,
+  }), [activeScheduleSlots, customSchedule, endDate, frequency, startDate, totalClasses]);
 
   const generatedClasses = useMemo(
     () => generateProjectSchedule(projectDraft),
     [projectDraft]
   );
 
-  const previewIsReady = Boolean(
-    startDate &&
-    endDate &&
-    totalClasses &&
-    activeScheduleSlots.every(slot => slot.time)
-  );
+  const customClassCount = asPositiveInteger(totalClasses) || 0;
+  const previewIsReady = frequency === 'custom'
+    ? Boolean(
+      customClassCount &&
+      customSchedule.length === customClassCount &&
+      customSchedule.every(session => session.date && session.time)
+    )
+    : Boolean(
+      startDate &&
+      endDate &&
+      totalClasses &&
+      activeScheduleSlots.every(slot => slot.time)
+    );
   const previewError = previewIsReady ? validateProjectSchedule(projectDraft) : '';
   const visiblePreview = generatedClasses.length <= 9
     ? generatedClasses
@@ -125,6 +140,26 @@ function CreateGroupPage() {
     setScheduleSlots(current => current.map((slot, slotIndex) => (
       slotIndex === index ? { ...slot, [field]: value } : slot
     )));
+    clearError('schedule');
+  };
+
+  const updateCustomSession = (index, field, value) => {
+    setCustomSchedule(current => Array.from({ length: customClassCount }, (_, sessionIndex) => (
+      sessionIndex === index
+        ? { ...(current[sessionIndex] || { date: '', time: '' }), [field]: value }
+        : current[sessionIndex] || { date: '', time: '' }
+    )));
+    clearError('schedule');
+  };
+
+  const updateTotalClasses = (value) => {
+    setTotalClasses(value);
+    const nextCount = asPositiveInteger(value) || 0;
+    setCustomSchedule(current => Array.from(
+      { length: nextCount },
+      (_, index) => current[index] || { date: '', time: '' }
+    ));
+    clearError('totalClasses');
     clearError('schedule');
   };
 
@@ -152,8 +187,8 @@ function CreateGroupPage() {
       }
       if (!TIME_PATTERN.test(regularTime)) nextErrors.schedule = 'Select a valid class time.';
     } else {
-      if (!startDate) nextErrors.startDate = 'Select a start date.';
-      if (!endDate) nextErrors.endDate = 'Select an end date.';
+      if (frequency !== 'custom' && !startDate) nextErrors.startDate = 'Select a start date.';
+      if (frequency !== 'custom' && !endDate) nextErrors.endDate = 'Select an end date.';
       if (asPositiveInteger(totalClasses) === null) {
         nextErrors.totalClasses = 'Enter a positive whole number.';
       }
@@ -207,15 +242,32 @@ function CreateGroupPage() {
         return;
       }
 
+      const customSessions = frequency === 'custom'
+        ? generatedClasses.map(session => ({ date: session.isoDate, time: session.time }))
+        : [];
+      const projectStartDate = frequency === 'custom'
+        ? customSessions[0].date
+        : startDate;
+      const projectEndDate = frequency === 'custom'
+        ? customSessions[customSessions.length - 1].date
+        : endDate;
       const projectRef = await addDoc(collection(db, 'projects'), {
         name: validation.trimmedName,
         type: 'PROJECT',
-        startDate,
-        endDate,
+        startDate: projectStartDate,
+        endDate: projectEndDate,
         totalClasses: asPositiveInteger(totalClasses),
         price: asPositiveNumber(price),
-        scheduleSlots: activeScheduleSlots,
-        schedule: scheduleLabel(activeScheduleSlots),
+        ...(frequency === 'custom' ? {
+          scheduleMode: 'custom',
+          scheduleSlots: [],
+          customSchedule: customSessions,
+          schedule: `Custom · ${customSessions.length} classes`,
+        } : {
+          scheduleMode: 'weekly',
+          scheduleSlots: activeScheduleSlots,
+          schedule: scheduleLabel(activeScheduleSlots),
+        }),
         coach: coachId,
         hidden,
         signedStudentCount: 0,
@@ -237,7 +289,7 @@ function CreateGroupPage() {
     }
   };
 
-  if (user?.role !== 'admin') {
+  if (!isStaff) {
     return <Navigate to="/groups" replace />;
   }
 
@@ -254,12 +306,12 @@ function CreateGroupPage() {
             ← Groups
           </button>
           <div>
-            <p>ADMIN</p>
+            <p>{isAdmin ? 'ADMIN' : 'COACH'}</p>
             <h1>Create</h1>
           </div>
         </header>
 
-        <div className="create-group-kind" role="group" aria-label="Create type">
+        {isAdmin && <div className="create-group-kind" role="group" aria-label="Create type">
           <button
             type="button"
             className={kind === 'regular' ? 'is-active' : ''}
@@ -278,7 +330,7 @@ function CreateGroupPage() {
           >
             Project
           </button>
-        </div>
+        </div>}
 
         <form className="create-group-form" onSubmit={handleSubmit} noValidate>
           <section className="create-group-card" aria-labelledby="create-basics-title">
@@ -400,7 +452,7 @@ function CreateGroupPage() {
               <section className="create-group-card" aria-labelledby="project-dates-title">
                 <h2 id="project-dates-title">Project dates & price</h2>
 
-                <div className="create-group-grid">
+                {frequency !== 'custom' && <div className="create-group-grid">
                   <label className={errors.startDate ? 'has-error' : ''}>
                     <span>Starts</span>
                     <input
@@ -434,7 +486,7 @@ function CreateGroupPage() {
                     />
                     {errors.endDate && <small id="project-end-error" role="alert">{errors.endDate}</small>}
                   </label>
-                </div>
+                </div>}
 
                 <div className="create-group-grid">
                   <label className={errors.totalClasses ? 'has-error' : ''}>
@@ -445,11 +497,7 @@ function CreateGroupPage() {
                       step="1"
                       inputMode="numeric"
                       value={totalClasses}
-                      onChange={event => {
-                        setTotalClasses(event.target.value);
-                        clearError('totalClasses');
-                        clearError('schedule');
-                      }}
+                      onChange={event => updateTotalClasses(event.target.value)}
                       aria-invalid={Boolean(errors.totalClasses)}
                       aria-describedby={errors.totalClasses ? 'project-classes-error' : undefined}
                       disabled={isSubmitting}
@@ -477,7 +525,9 @@ function CreateGroupPage() {
 
               <section className="create-group-card" aria-labelledby="project-schedule-title">
                 <div className="create-group-card-heading">
-                  <h2 id="project-schedule-title">Weekly schedule</h2>
+                  <h2 id="project-schedule-title">
+                    {frequency === 'custom' ? 'Custom schedule' : 'Weekly schedule'}
+                  </h2>
                   <label>
                     <span className="sr-only">Classes per week</span>
                     <select
@@ -493,11 +543,12 @@ function CreateGroupPage() {
                     >
                       <option value="1">Once a week</option>
                       <option value="2">Twice a week</option>
+                      <option value="custom">Custom schedule</option>
                     </select>
                   </label>
                 </div>
 
-                {activeScheduleSlots.map((slot, index) => (
+                {frequency !== 'custom' && activeScheduleSlots.map((slot, index) => (
                   <fieldset className="create-schedule-slot" key={index}>
                     <legend>Class {index + 1}</legend>
                     <label>
@@ -527,6 +578,45 @@ function CreateGroupPage() {
                     </label>
                   </fieldset>
                 ))}
+                {frequency === 'custom' && customClassCount === 0 && (
+                  <p className="create-preview-message">
+                    Enter the number of classes above, then choose every class date and time.
+                  </p>
+                )}
+                {frequency === 'custom' && customClassCount > 0 && (
+                  <div className="create-custom-schedule">
+                    {Array.from({ length: customClassCount }, (_, index) => {
+                      const session = customSchedule[index] || { date: '', time: '' };
+                      return (
+                        <fieldset className="create-schedule-slot create-custom-session" key={index}>
+                          <legend>Class {index + 1}</legend>
+                          <label>
+                            <span>Date</span>
+                            <input
+                              type="date"
+                              value={session.date}
+                              onChange={event => updateCustomSession(index, 'date', event.target.value)}
+                              aria-invalid={Boolean(errors.schedule)}
+                              aria-describedby={errors.schedule ? 'project-schedule-error' : undefined}
+                              disabled={isSubmitting}
+                            />
+                          </label>
+                          <label>
+                            <span>Time</span>
+                            <input
+                              type="time"
+                              value={session.time}
+                              onChange={event => updateCustomSession(index, 'time', event.target.value)}
+                              aria-invalid={Boolean(errors.schedule)}
+                              aria-describedby={errors.schedule ? 'project-schedule-error' : undefined}
+                              disabled={isSubmitting}
+                            />
+                          </label>
+                        </fieldset>
+                      );
+                    })}
+                  </div>
+                )}
                 {errors.schedule && (
                   <small id="project-schedule-error" className="create-group-section-error" role="alert">
                     {errors.schedule}
@@ -542,7 +632,11 @@ function CreateGroupPage() {
 
                 <div aria-live="polite">
                   {!previewIsReady && (
-                    <p className="create-preview-message">Complete the dates, class count, and weekly schedule.</p>
+                    <p className="create-preview-message">
+                      {frequency === 'custom'
+                        ? 'Complete the class count and every custom class date and time.'
+                        : 'Complete the dates, class count, and weekly schedule.'}
+                    </p>
                   )}
                   {previewIsReady && previewError && (
                     <p className="create-preview-error" role="alert">{previewError}</p>

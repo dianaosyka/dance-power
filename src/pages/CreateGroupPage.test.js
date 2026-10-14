@@ -195,6 +195,7 @@ describe('CreateGroupPage', () => {
         endDate: '2026-09-30',
         totalClasses: 5,
         price: 120.5,
+        scheduleMode: 'weekly',
         scheduleSlots: [
           { dayOfWeek: 2, time: '18:00' },
           { dayOfWeek: 4, time: '19:30' },
@@ -211,16 +212,70 @@ describe('CreateGroupPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/project/project-1');
   });
 
-  it('redirects non-admin users without exposing the form', () => {
+  it('lets coaches open project creation without exposing regular groups', () => {
     useUser.mockReturnValue({ user: { id: 'coach-1', role: 'coach' } });
+
+    render(<CreateGroupPage />);
+
+    expect(screen.queryByTestId('redirect')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create project' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create regular group' }))
+      .not.toBeInTheDocument();
+    expect(mockAddDoc).not.toHaveBeenCalled();
+  });
+
+  it('redirects students without exposing the form', () => {
+    useUser.mockReturnValue({ user: { id: 'student-1', role: 'student-1' } });
 
     render(<CreateGroupPage />);
 
     expect(screen.getByTestId('redirect')).toHaveAttribute('data-to', '/groups');
     expect(screen.getByTestId('redirect')).toHaveAttribute('data-replace', 'true');
-    expect(screen.queryByRole('button', { name: 'Create regular group' }))
-      .not.toBeInTheDocument();
-    expect(mockAddDoc).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
+  });
+
+  it('creates a custom project from manually selected class dates', async () => {
+    mockUseLocation.mockReturnValue({ search: '?kind=project' });
+    render(<CreateGroupPage />);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Custom Intensive' } });
+    fireEvent.change(screen.getByLabelText('Coach'), { target: { value: 'coach-1' } });
+    fireEvent.change(screen.getByLabelText('Classes'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Price per student (€)'), { target: { value: '90' } });
+    fireEvent.change(screen.getByLabelText('Classes per week'), { target: { value: 'custom' } });
+
+    const customClasses = [
+      ['2026-10-12', '18:00'],
+      ['2026-10-15', '19:30'],
+      ['2026-10-28', '17:00'],
+    ];
+    customClasses.forEach(([date, time], index) => {
+      const fieldset = screen.getByText(`Class ${index + 1}`).closest('fieldset');
+      fireEvent.change(within(fieldset).getByLabelText('Date'), { target: { value: date } });
+      fireEvent.change(within(fieldset).getByLabelText('Time'), { target: { value: time } });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(mockAddDoc).toHaveBeenCalledTimes(1));
+
+    expect(mockAddDoc).toHaveBeenCalledWith(
+      { database, name: 'projects' },
+      expect.objectContaining({
+        name: 'Custom Intensive',
+        startDate: '2026-10-12',
+        endDate: '2026-10-28',
+        totalClasses: 3,
+        price: 90,
+        scheduleMode: 'custom',
+        scheduleSlots: [],
+        customSchedule: [
+          { date: '2026-10-12', time: '18:00' },
+          { date: '2026-10-15', time: '19:30' },
+          { date: '2026-10-28', time: '17:00' },
+        ],
+        schedule: 'Custom · 3 classes',
+      })
+    );
   });
 
   it('does not start a second write while the first submit is pending', async () => {

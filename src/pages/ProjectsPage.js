@@ -90,7 +90,7 @@ function ProjectsPage() {
           </div>
           <div className="projects-header-actions">
             <button type="button" className="projects-waiting-link" onClick={() => navigate('/project-waiting-list')}>Waiting list</button>
-            {isAdmin && <button type="button" className="projects-create" onClick={() => navigate('/create-group?kind=project')}>+ Create</button>}
+            {isStaff && <button type="button" className="projects-create" onClick={() => navigate('/create-group?kind=project')}>+ Create</button>}
           </div>
         </header>
 
@@ -126,11 +126,11 @@ function ProjectsPage() {
             <span aria-hidden="true">✦</span>
             <h2>{showHidden ? 'No projects yet' : 'No visible projects'}</h2>
             <p>
-              {isAdmin
+              {isStaff
                 ? 'Create a fixed project with its coach, dates, and payment price.'
                 : 'There are no projects to show right now.'}
             </p>
-            {isAdmin && (
+            {isStaff && (
               <button type="button" onClick={() => navigate('/create-group?kind=project')}>
                 Create project
               </button>

@@ -25,6 +25,7 @@ import {
   formatLocalIsoDate,
   formatProjectDate,
   generateProjectSchedule,
+  getProjectSessionKey,
   getProjectStatus,
 } from '../utils/projectUtils';
 import './ProjectDetailPage.css';
@@ -135,6 +136,9 @@ function ProjectDetailPage() {
   const [activeMutation, setActiveMutation] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [coachReplacements, setCoachReplacements] = useState({});
+  const [replacementDrafts, setReplacementDrafts] = useState({});
+  const [savingReplacementKey, setSavingReplacementKey] = useState('');
 
   const projectLoadGeneration = useRef(0);
   const refreshInProgress = useRef(false);
@@ -162,6 +166,13 @@ function ProjectDetailPage() {
     const coach = (coaches || []).find(item => item.id === project?.coach);
     return coach?.name || coach?.email || project?.coach || 'Not assigned';
   }, [coaches, project?.coach]);
+  const coachNamesById = useMemo(
+    () => new Map((coaches || []).map(coach => [
+      coach.id,
+      coach.name || coach.email || coach.id,
+    ])),
+    [coaches]
+  );
 
   const signedStudentIds = useMemo(
     () => new Set(signedStudents.map(item => item.studentId || item.id)),
@@ -296,7 +307,10 @@ function ProjectDetailPage() {
     setStudentSearch('');
     setActionError('');
     setActionMessage('');
-  }, [projectId]);
+    setCoachReplacements(project?.coachReplacements || {});
+    setReplacementDrafts({});
+    setSavingReplacementKey('');
+  }, [projectId, project?.coachReplacements]);
 
   useEffect(() => {
     if (!isStaff || !projectsLoaded || !project) return undefined;
@@ -353,6 +367,57 @@ function ProjectDetailPage() {
   const finishMutation = () => {
     mutationInProgress.current = false;
     setActiveMutation('');
+  };
+
+  const handleSaveCoachReplacement = async (session) => {
+    if (!isStaff || !project || savingReplacementKey) return;
+    const sessionKey = getProjectSessionKey(session);
+    if (!sessionKey) return;
+
+    const selectedCoach = replacementDrafts[sessionKey]
+      || coachReplacements[sessionKey]
+      || project.coach
+      || '';
+    if (!selectedCoach) {
+      setActionError('Select a coach for this class.');
+      return;
+    }
+
+    setSavingReplacementKey(sessionKey);
+    setActionError('');
+    setActionMessage('');
+    const projectRef = doc(db, 'projects', projectId);
+
+    try {
+      let nextReplacements = {};
+      await runTransaction(db, async transaction => {
+        const projectSnapshot = await transaction.get(projectRef);
+        if (!projectSnapshot.exists()) {
+          throw createProjectActionError('project-missing', 'This project no longer exists.');
+        }
+
+        nextReplacements = { ...(projectSnapshot.data()?.coachReplacements || {}) };
+        if (selectedCoach === project.coach) {
+          delete nextReplacements[sessionKey];
+        } else {
+          nextReplacements[sessionKey] = selectedCoach;
+        }
+        transaction.update(projectRef, { coachReplacements: nextReplacements });
+      });
+
+      setCoachReplacements(nextReplacements);
+      setReplacementDrafts(current => ({ ...current, [sessionKey]: selectedCoach }));
+      invalidateSalarySummaries();
+      const selectedName = coachNamesById.get(selectedCoach) || selectedCoach;
+      setActionMessage(selectedCoach === project.coach
+        ? `Restored ${selectedName} as the coach for ${session.date}.`
+        : `Assigned ${selectedName} as replacement for ${session.date}.`);
+    } catch (error) {
+      console.error('Failed to save project coach replacement:', error);
+      setActionError(getErrorMessage(error));
+    } finally {
+      setSavingReplacementKey('');
+    }
   };
 
   const handleSignStudent = async (student) => {
@@ -610,19 +675,24 @@ function ProjectDetailPage() {
               <dd>{rosterCount}</dd>
             </div>
           </dl>
-          <div className="project-weekly-slots" aria-label="Weekly schedule">
-            {(project.scheduleSlots || []).map((slot, index) => (
-              <span key={`${slot.dayOfWeek}-${slot.time}-${index}`}>
-                {DAY_NAMES[Number(slot.dayOfWeek)] || 'Day'} · {slot.time || 'Time TBA'}
-              </span>
-            ))}
+          <div
+            className="project-weekly-slots"
+            aria-label={project.scheduleMode === 'custom' ? 'Custom schedule' : 'Weekly schedule'}
+          >
+            {project.scheduleMode === 'custom'
+              ? <span>Custom dates · {generatedSchedule.length} classes</span>
+              : (project.scheduleSlots || []).map((slot, index) => (
+                <span key={`${slot.dayOfWeek}-${slot.time}-${index}`}>
+                  {DAY_NAMES[Number(slot.dayOfWeek)] || 'Day'} · {slot.time || 'Time TBA'}
+                </span>
+              ))}
           </div>
         </section>
 
         <section className="project-schedule-card" aria-labelledby="project-schedule-title">
           <div className="project-section-heading project-schedule-heading">
             <div>
-              <p>Fixed schedule</p>
+              <p>{project.scheduleMode === 'custom' ? 'Custom schedule' : 'Fixed schedule'}</p>
               <h2 id="project-schedule-title">Classes</h2>
             </div>
             <strong>{elapsedClasses}/{totalClasses || generatedSchedule.length}</strong>
@@ -651,6 +721,12 @@ function ProjectDetailPage() {
                   : session.isoDate === todayIso
                     ? 'today'
                     : 'upcoming';
+                const sessionKey = getProjectSessionKey(session);
+                const replacementCoachId = coachReplacements[sessionKey] || '';
+                const selectedCoachId = replacementDrafts[sessionKey]
+                  || replacementCoachId
+                  || project.coach
+                  || '';
                 return (
                   <li key={`${session.isoDate}-${session.time}`} className={`is-${scheduleState}`}>
                     <span className="project-class-number">{session.index}</span>
@@ -667,6 +743,47 @@ function ProjectDetailPage() {
                           ? 'Today'
                           : 'Upcoming'}
                     </small>
+                    <div className="project-replacement-control">
+                      <label htmlFor={`project-replacement-${sessionKey}`}>
+                        {replacementCoachId ? 'Replacement coach' : 'Coach replacement'}
+                      </label>
+                      <div>
+                        <select
+                          id={`project-replacement-${sessionKey}`}
+                          value={selectedCoachId}
+                          onChange={event => setReplacementDrafts(current => ({
+                            ...current,
+                            [sessionKey]: event.target.value,
+                          }))}
+                          disabled={Boolean(savingReplacementKey)}
+                        >
+                          {project.coach && (
+                            <option value={project.coach}>
+                              {coachNamesById.get(project.coach) || project.coach} · original
+                            </option>
+                          )}
+                          {(coaches || [])
+                            .filter(coach => coach.id !== project.coach)
+                            .map(coach => (
+                              <option key={coach.id} value={coach.id}>
+                                {coach.name || coach.email || coach.id}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCoachReplacement(session)}
+                          disabled={Boolean(savingReplacementKey) || selectedCoachId === (replacementCoachId || project.coach)}
+                        >
+                          {savingReplacementKey === sessionKey ? 'Saving…' : 'Save coach'}
+                        </button>
+                      </div>
+                      {replacementCoachId && (
+                        <span>
+                          Replacement: {coachNamesById.get(replacementCoachId) || replacementCoachId}
+                        </span>
+                      )}
+                    </div>
                   </li>
                 );
               })}

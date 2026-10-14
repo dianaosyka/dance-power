@@ -290,7 +290,9 @@ function SchedulePage() {
           time: session.time,
         },
         project,
-        coach: project.coach ? [project.coach] : [],
+        coach: session.replacementCoach
+          ? [session.replacementCoach]
+          : project.coach ? [project.coach] : [],
         isProject: true,
       })));
   }, [visibleDateKeys, visibleProjects]);

@@ -29,6 +29,17 @@ describe('project schedule helpers', () => {
     expect(validateProjectSchedule(twiceWeeklyProject)).toBe('');
   });
 
+  it('attaches a replacement coach only to the selected session', () => {
+    const projectWithReplacement = {
+      ...twiceWeeklyProject,
+      coachReplacements: { '2026-09-03--19:30': 'coach-2' },
+    };
+
+    const sessions = generateProjectSchedule(projectWithReplacement);
+    expect(sessions[0].replacementCoach).toBeUndefined();
+    expect(sessions[1].replacementCoach).toBe('coach-2');
+  });
+
   it('includes both date boundaries and reports an insufficient range', () => {
     const inclusiveProject = {
       startDate: '2026-09-01',
@@ -64,6 +75,26 @@ describe('project schedule helpers', () => {
       ...twiceWeeklyProject,
       scheduleSlots: [{ dayOfWeek: 7, time: '18:00' }],
     })).toBe('Every schedule needs a valid weekday and time.');
+  });
+
+  it('uses manually selected custom class dates in chronological order', () => {
+    const customProject = {
+      scheduleMode: 'custom',
+      totalClasses: 3,
+      customSchedule: [
+        { date: '2026-10-28', time: '17:00' },
+        { date: '2026-10-12', time: '18:00' },
+        { date: '2026-10-15', time: '19:30' },
+      ],
+    };
+
+    expect(generateProjectSchedule(customProject).map(session => session.isoDate))
+      .toEqual(['2026-10-12', '2026-10-15', '2026-10-28']);
+    expect(validateProjectSchedule(customProject)).toBe('');
+    expect(validateProjectSchedule({
+      ...customProject,
+      customSchedule: customProject.customSchedule.slice(0, 2),
+    })).toBe('Add a date and time for all 3 classes.');
   });
 
   it('parses and formats ISO dates with local calendar components', () => {

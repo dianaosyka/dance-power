@@ -82,7 +82,7 @@ function AppRoutes() {
       />
       <Route
         path="/create-group"
-        element={user.role === 'admin'
+        element={isStaff
           ? <CreateGroupPage />
           : <Navigate to="/groups" replace />}
       />

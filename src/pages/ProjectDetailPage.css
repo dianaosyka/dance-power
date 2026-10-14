@@ -257,6 +257,66 @@
   background: rgba(255, 255, 255, 0.045);
 }
 
+.project-replacement-control {
+  display: grid;
+  grid-column: 2 / 4;
+  gap: 5px;
+  padding-top: 4px;
+}
+
+.project-replacement-control > label {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-replacement-control > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.project-replacement-control select,
+.project-replacement-control button {
+  min-height: 36px;
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.project-replacement-control select {
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.project-replacement-control select option {
+  color: #1f1030;
+}
+
+.project-replacement-control button {
+  padding: 6px 10px;
+  border: 0;
+  background: linear-gradient(105deg, #18bfd6, #b02dcc);
+}
+
+.project-replacement-control button:disabled,
+.project-replacement-control select:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.project-replacement-control > span {
+  color: #91f7ff;
+  font-size: 9px;
+  font-weight: 800;
+}
+
 .project-schedule-list li.is-elapsed {
   opacity: 0.58;
 }

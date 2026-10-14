@@ -220,6 +220,18 @@
   border-radius: 12px;
 }
 
+.create-custom-schedule {
+  display: grid;
+  max-height: 520px;
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-color: rgba(131, 245, 255, 0.45) rgba(255, 255, 255, 0.06);
+}
+
+.create-custom-session {
+  grid-template-columns: minmax(0, 1fr) 130px;
+}
+
 .create-schedule-slot legend {
   padding: 0 6px;
   color: #8cf5ff;

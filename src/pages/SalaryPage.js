@@ -588,8 +588,11 @@ function SalaryPage() {
       // only be counted once, matching permanent-group salary semantics while
       // keeping project payments out of the root payments collection.
       for (const project of projects) {
-        const coachIds = project?.coach ? [project.coach] : [];
-        if (isCoach && !coachIds.includes(user.id)) continue;
+        const projectCoachIds = [...new Set([
+          project?.coach,
+          ...Object.values(project?.coachReplacements || {}),
+        ].filter(Boolean))];
+        if (isCoach && !projectCoachIds.includes(user.id)) continue;
         if (!hasProjectSessionsForSalaryMonth(project, runMonth)) continue;
 
         const projectPaymentSnapshot = await getDocsFromServer(
@@ -604,6 +607,8 @@ function SalaryPage() {
         });
 
         for (const session of projectSalaryClasses) {
+          const coachIds = [session.replacementCoach || project?.coach].filter(Boolean);
+          if (isCoach && !coachIds.includes(user.id)) continue;
           const studentCount = session.studentCount;
           const grossPerClass = session.gross;
           const coachRate = session.coachRate;

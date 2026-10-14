@@ -164,7 +164,10 @@ describe('ProjectDetailPage', () => {
       projects: [project],
       projectsLoaded: true,
       projectsError: null,
-      coaches: [{ id: 'coach-1', name: 'Amy Coach' }],
+      coaches: [
+        { id: 'coach-1', name: 'Amy Coach' },
+        { id: 'coach-2', name: 'Zoey Coach' },
+      ],
       students: [alice],
       studentsLoaded: true,
       studentsLoading: false,
@@ -241,6 +244,23 @@ describe('ProjectDetailPage', () => {
       '/add-payment?mode=project&projectId=project-1&studentId=student-1&returnTo=%2Fproject%2Fproject-1'
     );
     expect(mockTransaction.set).not.toHaveBeenCalled();
+  });
+
+  it('assigns a replacement coach to an individual project class', async () => {
+    setTransactionDocument('projects/project-1', true, { coachReplacements: {} });
+    render(<ProjectDetailPage />);
+
+    const firstReplacementSelect = (await screen.findAllByLabelText('Coach replacement'))[0];
+    fireEvent.change(firstReplacementSelect, { target: { value: 'coach-2' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save coach' })[0]);
+
+    await waitFor(() => expect(mockTransaction.update).toHaveBeenCalledWith(
+      { database, path: 'projects/project-1' },
+      { coachReplacements: { '2026-09-01--18:00': 'coach-2' } }
+    ));
+    expect(await screen.findByText('Assigned Zoey Coach as replacement for 01.09.2026.'))
+      .toBeInTheDocument();
+    expect(invalidateSalarySummaries).toHaveBeenCalledTimes(1);
   });
 
   it('shows a first installment as 50% paid and offers the second payment', async () => {
