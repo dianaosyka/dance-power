@@ -977,8 +977,8 @@ function SalaryPage() {
                         <strong>{coach.name}</strong>
                         {record?.issue && <span className="salary-coach-issue">⚠ {record.issue}</span>}
                       </div>
-                      <span>{coach.classes} classes</span>
-                      <strong>{coach.salary.toFixed(2)}€</strong>
+                      <span className="salary-coach-classes">{coach.classes} classes</span>
+                      <strong className="salary-coach-amount">{coach.salary.toFixed(2)}€</strong>
                       <div className="salary-coach-state">
                         {isAdmin && canMarkSalaryPaid(status) && (
                           <button type="button" className="salary-inline-paid-button" disabled={updatingSalaryCoachId === coach.id} onClick={() => updateSalaryStatus(coach.id, SALARY_STATUS.PAID)}>

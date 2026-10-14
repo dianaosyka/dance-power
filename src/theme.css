@@ -397,6 +397,42 @@ input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, .42); }
     padding: 13px 4px 12px;
     align-items: center;
   }
+  .salary-page > .salary-list > .salary-coach-row {
+    padding: 14px 4px;
+  }
+  .salary-page > ul.salary-list > li.salary-row.salary-coach-row.status-needs_review {
+    width: auto;
+    margin-right: -14px;
+    margin-left: -14px;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .salary-coach-identity > strong {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  .salary-coach-classes {
+    color: var(--dp-muted);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .salary-coach-amount {
+    font-size: 15px;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  .salary-inline-paid-button {
+    min-height: 32px;
+    padding: 0 11px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+  .salary-inline-paid,
+  .salary-inline-review {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+  }
   .salary-page > .salary-list > .salary-row > span:first-child {
     grid-column: 1;
     grid-row: 1;

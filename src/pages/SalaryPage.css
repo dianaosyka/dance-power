@@ -220,12 +220,33 @@
 
 @media (max-width: 560px) {
   .salary-coach-row-main {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 16px;
+    row-gap: 8px;
+  }
+
+  .salary-coach-identity {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .salary-coach-classes {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .salary-coach-amount {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    text-align: right;
   }
 
   .salary-coach-state {
-    grid-column: 1 / -1;
-    padding-bottom: 8px;
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
   }
 }
 
