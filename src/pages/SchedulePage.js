@@ -12,6 +12,7 @@ import { getReadCacheEpoch } from '../utils/readCacheEpoch';
 import { generateProjectSchedule } from '../utils/projectUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import './SchedulePage.css';
+import { useAppBack } from '../components/AppNavigationHistory';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -87,6 +88,7 @@ function formatLoadedTime(timestamp) {
 
 function SchedulePage() {
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const {
     db,
     groups,
@@ -364,7 +366,7 @@ function SchedulePage() {
   return (
     <div className="schedule-page">
       <div className="schedule-shell">
-        <button className="schedule-back-arrow" type="button" onClick={() => navigate('/groups')} aria-label="Back to groups">←</button>
+        <button className="schedule-back-arrow" type="button" onClick={goBack} aria-label="Go back">←</button>
         <RefreshStatus
           message={rangeIsLoaded ? formatLoadedTime(lastLoadedAt) : 'Not updated yet'}
           error={error

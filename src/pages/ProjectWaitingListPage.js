@@ -5,11 +5,13 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import './ProjectWaitingListPage.css';
+import { useAppBack } from '../components/AppNavigationHistory';
 import './ProjectWaitingListStyles.css';
 import './ProjectWaitingListRedesign.css';
 
 function ProjectWaitingListPage() {
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const { db, students = [], studentsLoaded, studentsLoading, groups = [] } = useData();
   const { user } = useUser();
   const [waiting, setWaiting] = useState([]);
@@ -119,7 +121,7 @@ function ProjectWaitingListPage() {
 
   return <main className="project-waiting-page"><div className="project-waiting-shell">
     <header className="project-waiting-header">
-      <button type="button" onClick={() => navigate('/projects')}>← Projects</button>
+      <button type="button" onClick={goBack}>← Back</button>
       <div><p>PROJECT WAITLIST</p><h1>Waiting list</h1></div>
       <strong>{waiting.length}</strong>
     </header>

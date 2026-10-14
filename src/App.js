@@ -23,6 +23,7 @@ import WorkshopDetailPage from './pages/WorkshopDetailPage';
 import CreateWorkshopPage from './pages/CreateWorkshopPage';
 import GroupDetailsPage from './pages/GroupDetailsPage';
 import PageBackButton from './components/PageBackButton';
+import { AppNavigationHistory } from './components/AppNavigationHistory';
 import './theme.css';
 
 function AppRoutes() {
@@ -40,6 +41,7 @@ function AppRoutes() {
 
   return (
     <>
+      <AppNavigationHistory />
       <PageBackButton />
       <Routes>
       <Route

@@ -79,6 +79,7 @@ jest.mock('../components/RefreshStatus', () => () => null);
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
   useParams: () => mockUseParams(),
+  useLocation: () => ({ pathname: '/project/project-1', search: '', hash: '' }),
 }), { virtual: true });
 
 function querySnapshot(rows) {

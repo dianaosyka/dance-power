@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import { useAppBack } from '../components/AppNavigationHistory';
 import './WorkshopsPage.css';
 
 function formatWorkshopDate(value) {
@@ -13,12 +14,13 @@ function WorkshopsPage() {
   const { workshops = [], coaches = [] } = useData();
   const { user } = useUser();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const [showHidden, setShowHidden] = useState(false);
   const coachNames = new Map(coaches.map(coach => [coach.id, coach.name || coach.id]));
   const visible = workshops.filter(item => showHidden || item.hidden !== true)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   return <main className="workshops-page"><div className="workshops-shell">
-    <header className="workshops-header"><button className="workshops-back" onClick={() => navigate('/groups')}>← Groups</button><div><p>EVENTS</p><h1>Workshops</h1></div>{user?.role === 'admin' ? <button className="workshops-create" onClick={() => navigate('/create-workshop')}>+ Create</button> : <span />}</header>
+    <header className="workshops-header"><button className="workshops-back" onClick={goBack}>← Back</button><div><p>EVENTS</p><h1>Workshops</h1></div>{user?.role === 'admin' ? <button className="workshops-create" onClick={() => navigate('/create-workshop')}>+ Create</button> : <span />}</header>
     <div className="workshops-toolbar"><span>{visible.length} {visible.length === 1 ? 'workshop' : 'workshops'}</span>{user?.role === 'admin' && <label><input type="checkbox" checked={showHidden} onChange={event => setShowHidden(event.target.checked)} /> Show hidden</label>}</div>
     <ul className="workshops-list">{visible.map(workshop => <li key={workshop.id}>
       <button className="workshop-card" onClick={() => navigate(`/workshop/${workshop.id}`)}>

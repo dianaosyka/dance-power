@@ -32,6 +32,7 @@ import {
   getSalaryMonthDocumentId,
   SALARY_STATUS,
 } from '../utils/salaryWorkflow';
+import { useAppBack } from '../components/AppNavigationHistory';
 import './SalaryPage.css';
 
 function getCurrentMonthValue() {
@@ -149,6 +150,7 @@ function buildLessonsByCoach(classRows, workshopRows = []) {
 
 function SalaryPage() {
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const {
     groups,
     projects,
@@ -862,7 +864,7 @@ function SalaryPage() {
   if (!isAdmin && !isCoach) {
     return (
       <div className="salary-page">
-        <button className="salary-back-button" onClick={() => navigate('/groups')}>
+        <button className="salary-back-button" onClick={goBack}>
           Back
         </button>
         <h2>Salary</h2>
@@ -874,7 +876,7 @@ function SalaryPage() {
   return (
     <div className="salary-page">
       <header className="salary-page-header">
-        <button className="salary-back-button" onClick={() => navigate('/groups')} aria-label="Back to groups">
+        <button className="salary-back-button" onClick={goBack} aria-label="Go back">
           ←
         </button>
         <div>

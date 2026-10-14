@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { formatProjectDate, getProjectStatus } from '../utils/projectUtils';
+import { useAppBack } from '../components/AppNavigationHistory';
 import './ProjectsPage.css';
 
 const STATUS_ORDER = ['active', 'upcoming', 'completed'];
@@ -31,6 +32,7 @@ function ProjectsPage() {
   } = useData();
   const { user } = useUser();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const [showHidden, setShowHidden] = useState(false);
 
   const isAdmin = user?.role === 'admin';
@@ -80,9 +82,9 @@ function ProjectsPage() {
           <button
             type="button"
             className="projects-back"
-            onClick={() => navigate('/groups')}
+            onClick={goBack}
           >
-            ← Groups
+            ← Back
           </button>
           <div>
             <p>FIXED PROGRAMS</p>

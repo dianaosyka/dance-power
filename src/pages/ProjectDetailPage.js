@@ -12,6 +12,7 @@ import { useUser } from '../context/UserContext';
 import RefreshStatus from '../components/RefreshStatus';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import { deleteProjectAndData } from '../utils/scopedEntityDeletion';
+import { useAppBack } from '../components/AppNavigationHistory';
 import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import {
   getPaymentMethodLabel,
@@ -101,6 +102,7 @@ function getMutationLabel(mutationKey, expectedKey, pendingLabel, idleLabel) {
 function ProjectDetailPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const {
     db,
     projects,
@@ -598,7 +600,7 @@ function ProjectDetailPage() {
         <div className="project-detail-shell project-detail-state">
           <h1>Project</h1>
           <p>Only admins and coaches can view project details.</p>
-          <button type="button" onClick={() => navigate('/groups')}>Back to groups</button>
+          <button type="button" onClick={goBack}>Back</button>
         </div>
       </main>
     );
@@ -625,7 +627,7 @@ function ProjectDetailPage() {
               ? `The project list could not be loaded: ${getErrorMessage(projectsError)}`
               : 'This project may have been removed.'}
           </p>
-          <button type="button" onClick={() => navigate('/groups')}>Back to groups</button>
+          <button type="button" onClick={goBack}>Back</button>
         </div>
       </main>
     );
@@ -642,8 +644,8 @@ function ProjectDetailPage() {
           <button
             type="button"
             className="project-detail-back"
-            onClick={() => navigate('/groups')}
-            aria-label="Back to groups"
+            onClick={goBack}
+            aria-label="Go back"
           >
             <span aria-hidden="true">‹</span>
             Back

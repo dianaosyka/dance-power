@@ -3,6 +3,7 @@ import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
+import { useAppBack } from '../components/AppNavigationHistory';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import './CreateWorkshopPage.css';
 
@@ -10,6 +11,7 @@ function CreateWorkshopPage() {
   const { db, coaches = [], coachesLoaded } = useData();
   const { user } = useUser();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const submittingRef = useRef(false);
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
@@ -58,7 +60,7 @@ function CreateWorkshopPage() {
   return (
     <main className="create-workshop-page"><div className="create-workshop-shell">
       <header className="create-workshop-header">
-        <button type="button" className="create-workshop-back" onClick={() => navigate('/workshops')}>← Workshops</button>
+        <button type="button" className="create-workshop-back" onClick={goBack}>← Back</button>
         <div><p>NEW EVENT</p><h1>Create workshop</h1></div>
       </header>
       <form className="create-workshop-form" onSubmit={submit}>
@@ -86,7 +88,7 @@ function CreateWorkshopPage() {
         </div>
         <label className="workshop-hidden"><input type="checkbox" checked={hidden} onChange={e => setHidden(e.target.checked)} /><span>Hide workshop from regular lists</span></label>
         {error && <p className="workshop-form-error" role="alert">{error}</p>}
-        <div className="create-workshop-actions"><button type="button" onClick={() => navigate('/workshops')}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create workshop'}</button></div>
+        <div className="create-workshop-actions"><button type="button" onClick={goBack}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create workshop'}</button></div>
       </form>
     </div></main>
   );

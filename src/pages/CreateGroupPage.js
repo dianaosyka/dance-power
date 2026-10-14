@@ -8,6 +8,7 @@ import {
   validateProjectSchedule,
 } from '../utils/projectUtils';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { useAppBack } from '../components/AppNavigationHistory';
 import './CreateGroupPage.css';
 
 const WEEKDAYS = [
@@ -46,6 +47,7 @@ function CreateGroupPage() {
   const { db, coaches = [], coachesLoaded } = useData();
   const { user } = useUser();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const location = useLocation();
   const requestedKind = new URLSearchParams(location.search).get('kind');
   const isAdmin = user?.role === 'admin';
@@ -300,10 +302,10 @@ function CreateGroupPage() {
           <button
             type="button"
             className="create-group-back"
-            onClick={() => navigate('/groups')}
+            onClick={goBack}
             disabled={isSubmitting}
           >
-            ← Groups
+            ← Back
           </button>
           <div>
             <p>{isAdmin ? 'ADMIN' : 'COACH'}</p>

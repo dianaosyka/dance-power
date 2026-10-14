@@ -7,12 +7,14 @@ import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
 import { includesSearchText } from '../utils/searchUtils';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import { deleteWorkshopAndData } from '../utils/scopedEntityDeletion';
+import { useAppBack } from '../components/AppNavigationHistory';
 
 import './WorkshopDetailPage.css';
 
 function WorkshopDetailPage() {
   const { workshopId } = useParams();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const { db, workshops = [], students = [], coaches = [] } = useData();
   const { user } = useUser();
   const workshop = workshops.find(item => item.id === workshopId);
@@ -111,7 +113,7 @@ function WorkshopDetailPage() {
 
   if (!workshop) return <main className="workshop-detail-page"><p>Workshop not found.</p></main>;
   return <main className="workshop-detail-page"><div className="workshop-detail-shell">
-    <header className="workshop-detail-header"><button onClick={() => navigate('/workshops')}>← Workshops</button><div><p>WORKSHOP</p><h1>{workshop.name}</h1></div></header>
+    <header className="workshop-detail-header"><button onClick={goBack}>← Back</button><div><p>WORKSHOP</p><h1>{workshop.name}</h1></div></header>
     <section className="workshop-summary">
       <div><span>Date & time</span><strong>{workshop.date} · {workshop.time}</strong></div>
       <div><span>Price</span><strong>€{Number(workshop.price).toFixed(2)}</strong></div>

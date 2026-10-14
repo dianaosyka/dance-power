@@ -1,5 +1,6 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useAppBack } from './AppNavigationHistory';
 import './PageBackButton.css';
 
 const ROUTES_WITHOUT_LOCAL_BACK = [
@@ -12,29 +13,12 @@ const ROUTES_WITHOUT_LOCAL_BACK = [
 ];
 
 function PageBackButton() {
-  const navigate = useNavigate();
+  const goBack = useAppBack();
   const { pathname } = useLocation();
 
   if (!ROUTES_WITHOUT_LOCAL_BACK.some(pattern => pattern.test(pathname))) {
     return null;
   }
-
-  const goBack = () => {
-    if (/^\/group\/[^/]+\/?$/.test(pathname)) {
-      navigate('/groups');
-      return;
-    }
-    const classMatch = pathname.match(/^\/group\/([^/]+)\/class\/[^/]+\/?$/);
-    if (classMatch) {
-      navigate(`/group/${classMatch[1]}`);
-      return;
-    }
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/groups');
-  };
 
   return (
     <button

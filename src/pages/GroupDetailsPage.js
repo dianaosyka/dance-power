@@ -5,6 +5,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import { deleteGroupAndReferences } from '../utils/groupDeletion';
+import { useAppBack } from '../components/AppNavigationHistory';
 import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import './GroupDetailsPage.css';
 
@@ -25,6 +26,7 @@ function initials(name) {
 function GroupDetailsPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
+  const goBack = useAppBack();
   const {
     db, groups, groupsLoaded, students, studentsLoaded, studentsLoading, coaches,
     removeGroupFromCachedRecords, invalidatePastClasses,
@@ -165,7 +167,7 @@ function GroupDetailsPage() {
   return (
     <main className="group-details-page">
       <header className="group-details-header">
-        <button className="group-details-back" type="button" onClick={() => navigate(`/group/${groupId}`)} aria-label="Back to group">←</button>
+        <button className="group-details-back" type="button" onClick={goBack} aria-label="Go back">←</button>
         <div><p>GROUP DETAILS</p><h1>{group?.name || 'Loading…'}</h1></div>
       </header>
 
