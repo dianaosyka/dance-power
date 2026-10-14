@@ -5,6 +5,8 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getPaymentMethodLabel } from '../utils/paymentMethodUtils';
 import { includesSearchText } from '../utils/searchUtils';
+import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { deleteWorkshopAndData } from '../utils/scopedEntityDeletion';
 
 import './WorkshopDetailPage.css';
 
@@ -20,6 +22,8 @@ function WorkshopDetailPage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const isAdmin = user?.role === 'admin';
   const studentById = useMemo(() => new Map(students.map(s => [s.id, s])), [students]);
   const memberIds = useMemo(() => new Set(members.map(m => m.studentId || m.id)), [members]);
   const paidIds = useMemo(() => new Set(payments.filter(p => p.status === 'active').map(p => p.studentId)), [payments]);
@@ -86,6 +90,25 @@ function WorkshopDetailPage() {
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
 
+  const deleteWorkshop = async () => {
+    if (!isAdmin || !workshop || deleting) return;
+    if (!window.confirm(
+      `Delete workshop ${workshop.name || workshopId}? This permanently deletes its participants and payments.`
+    )) return;
+
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteWorkshopAndData(db, workshopId);
+      invalidateSalarySummaries();
+      navigate('/workshops', { replace: true });
+    } catch (err) {
+      console.error('Failed to delete workshop:', err);
+      setError(`The workshop could not be deleted: ${err?.message || String(err)}`);
+      setDeleting(false);
+    }
+  };
+
   if (!workshop) return <main className="workshop-detail-page"><p>Workshop not found.</p></main>;
   return <main className="workshop-detail-page"><div className="workshop-detail-shell">
     <header className="workshop-detail-header"><button onClick={() => navigate('/workshops')}>← Workshops</button><div><p>WORKSHOP</p><h1>{workshop.name}</h1></div></header>
@@ -109,6 +132,7 @@ function WorkshopDetailPage() {
       })}</ul>
     </section>
     <section className="workshop-panel workshop-payment-panel"><div className="workshop-panel-heading"><div><p>TRANSACTIONS</p><h2>Payments <span>{payments.length}</span></h2></div></div><ul className="workshop-payment-list">{payments.map(payment => <li key={payment.id}><button type="button" onClick={() => navigate(`/student/${encodeURIComponent(payment.studentId)}?workshopPaymentId=${encodeURIComponent(payment.id)}&workshopId=${encodeURIComponent(workshopId)}`)} aria-label={`Open workshop payment for ${studentById.get(payment.studentId)?.name || payment.studentName || payment.studentId}`}><div><strong>{studentById.get(payment.studentId)?.name || payment.studentName || payment.studentId}</strong><small>{payment.createdAt} · {getPaymentMethodLabel(payment.paymentMethod)}</small></div><strong>€{Number(payment.amount).toFixed(2)}</strong><span aria-hidden="true">›</span></button></li>)}</ul>{!payments.length && <p className="workshop-panel-empty">No payments recorded yet.</p>}</section>
+    {isAdmin && <section className="workshop-danger-zone"><div><p>DANGER ZONE</p><h2>Delete workshop</h2><span>Permanently deletes this workshop, its participants, and all workshop payments.</span></div><button type="button" onClick={deleteWorkshop} disabled={deleting || busy}>{deleting ? 'Deleting…' : 'Delete workshop'}</button></section>}
   </div></main>;
 }
 export default WorkshopDetailPage;

@@ -42,4 +42,11 @@
 .workshop-payment-list li > button > strong { color: #84eff8; }
 .workshop-payment-list li > button > span { color: #ffffff85; font-size: 21px; }
 .workshop-panel-empty { margin: 18px 0 2px; color: #ffffff78; font-size: 12px; text-align: center; }
-@media (max-width: 600px) { .workshop-detail-header { grid-template-columns: auto 1fr; gap: 10px; } .workshop-detail-header > div { grid-column: 2; text-align: right; } .workshop-detail-header h1 { font-size: 25px; } .workshop-summary { grid-template-columns: 1fr 1fr; } .workshop-summary-coaches { grid-column: 1 / -1; } .workshop-panel { padding: 14px; } .workshop-signup-search { grid-template-columns: 1fr; } .workshop-sign-button { justify-self: end; } }
+.workshop-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 16px; padding: 16px 18px; border: 1px solid #ff69875c; border-radius: 14px; background: #82082d29; }
+.workshop-danger-zone p, .workshop-danger-zone h2, .workshop-danger-zone span { display: block; margin: 0; }
+.workshop-danger-zone p { margin-bottom: 3px; color: #ff9db5; font-size: 9px; font-weight: 900; letter-spacing: .14em; }
+.workshop-danger-zone h2 { font-size: 16px; }
+.workshop-danger-zone span { margin-top: 5px; color: #ffffff94; font-size: 10px; }
+.workshop-danger-zone button { flex: 0 0 auto; min-height: 40px; padding: 0 13px; border: 1px solid #ff77938c; border-radius: 9px; background: #af0f3747; color: #ffc1d0; font-weight: 850; cursor: pointer; }
+.workshop-danger-zone button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 600px) { .workshop-detail-header { grid-template-columns: auto 1fr; gap: 10px; } .workshop-detail-header > div { grid-column: 2; text-align: right; } .workshop-detail-header h1 { font-size: 25px; } .workshop-summary { grid-template-columns: 1fr 1fr; } .workshop-summary-coaches { grid-column: 1 / -1; } .workshop-panel { padding: 14px; } .workshop-signup-search { grid-template-columns: 1fr; } .workshop-sign-button { justify-self: end; } .workshop-danger-zone { align-items: stretch; flex-direction: column; } .workshop-danger-zone button { width: 100%; } }

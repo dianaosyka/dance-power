@@ -11,6 +11,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import RefreshStatus from '../components/RefreshStatus';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
+import { deleteProjectAndData } from '../utils/scopedEntityDeletion';
 import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import {
   getPaymentMethodLabel,
@@ -139,6 +140,7 @@ function ProjectDetailPage() {
   const [coachReplacements, setCoachReplacements] = useState({});
   const [replacementDrafts, setReplacementDrafts] = useState({});
   const [savingReplacementKey, setSavingReplacementKey] = useState('');
+  const [deletingProject, setDeletingProject] = useState(false);
 
   const projectLoadGeneration = useRef(0);
   const refreshInProgress = useRef(false);
@@ -417,6 +419,26 @@ function ProjectDetailPage() {
       setActionError(getErrorMessage(error));
     } finally {
       setSavingReplacementKey('');
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!isAdmin || !project || deletingProject) return;
+    if (!window.confirm(
+      `Delete project ${project.name || projectId}? This permanently deletes its roster and payments.`
+    )) return;
+
+    setDeletingProject(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      await deleteProjectAndData(db, projectId);
+      invalidateSalarySummaries();
+      navigate('/projects', { replace: true });
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      setActionError(`The project could not be deleted: ${getErrorMessage(error)}`);
+      setDeletingProject(false);
     }
   };
 
@@ -992,6 +1014,18 @@ function ProjectDetailPage() {
             </ul>
           )}
         </section>
+        {isAdmin && (
+          <section className="project-danger-zone" aria-labelledby="project-delete-title">
+            <div>
+              <p>Danger zone</p>
+              <h2 id="project-delete-title">Delete project</h2>
+              <span>Permanently deletes this project, its roster, and all project payments.</span>
+            </div>
+            <button type="button" onClick={handleDeleteProject} disabled={deletingProject}>
+              {deletingProject ? 'Deleting…' : 'Delete project'}
+            </button>
+          </section>
+        )}
       </div>
     </main>
   );

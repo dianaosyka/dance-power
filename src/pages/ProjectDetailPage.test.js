@@ -22,6 +22,7 @@ import ProjectDetailPage from './ProjectDetailPage';
 
 const mockNavigate = jest.fn();
 const mockUseParams = jest.fn();
+const mockDeleteProjectAndData = jest.fn();
 
 jest.mock('firebase/firestore', () => {
   const serverCollections = new Map();
@@ -67,6 +68,10 @@ jest.mock('../context/UserContext', () => ({
 
 jest.mock('../utils/salaryCache', () => ({
   invalidateSalarySummaries: jest.fn(),
+}));
+
+jest.mock('../utils/scopedEntityDeletion', () => ({
+  deleteProjectAndData: (...args) => mockDeleteProjectAndData(...args),
 }));
 
 jest.mock('../components/RefreshStatus', () => () => null);
@@ -158,6 +163,7 @@ describe('ProjectDetailPage', () => {
       return updateFunction(mockTransaction);
     });
     mockUseParams.mockReturnValue({ projectId: 'project-1' });
+    mockDeleteProjectAndData.mockResolvedValue(undefined);
     useUser.mockReturnValue({ user: { id: 'admin-1', role: 'admin' } });
     useData.mockReturnValue({
       db: database,
@@ -261,6 +267,21 @@ describe('ProjectDetailPage', () => {
     expect(await screen.findByText('Assigned Zoey Coach as replacement for 01.09.2026.'))
       .toBeInTheDocument();
     expect(invalidateSalarySummaries).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets an admin permanently delete the project and its nested data', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<ProjectDetailPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
+
+    await waitFor(() => expect(mockDeleteProjectAndData).toHaveBeenCalledWith(
+      database,
+      'project-1'
+    ));
+    expect(invalidateSalarySummaries).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('/projects', { replace: true });
+    window.confirm.mockRestore();
   });
 
   it('shows a first installment as 50% paid and offers the second payment', async () => {

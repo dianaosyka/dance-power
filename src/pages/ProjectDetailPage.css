@@ -125,6 +125,47 @@
   backdrop-filter: blur(8px);
 }
 
+.project-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 105, 135, 0.36);
+  border-radius: 14px;
+  background: rgba(130, 8, 45, 0.16);
+}
+
+.project-danger-zone p,
+.project-danger-zone h2,
+.project-danger-zone span {
+  display: block;
+  margin: 0;
+}
+
+.project-danger-zone p {
+  margin-bottom: 3px;
+  color: #ff9db5;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.project-danger-zone h2 { font-size: 16px; }
+.project-danger-zone span { margin-top: 5px; color: rgba(255,255,255,.58); font-size: 10px; }
+.project-danger-zone button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 119, 147, 0.55);
+  border-radius: 9px;
+  background: rgba(175, 15, 55, 0.28);
+  color: #ffc1d0;
+  font-weight: 850;
+}
+.project-danger-zone button:disabled { opacity: .5; }
+
 .project-section-heading {
   display: flex;
   align-items: flex-start;
@@ -869,6 +910,15 @@
   .project-progress-copy {
     flex-direction: column;
     gap: 3px;
+  }
+
+  .project-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-danger-zone button {
+    width: 100%;
   }
 }
 
