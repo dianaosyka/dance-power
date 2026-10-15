@@ -26,6 +26,8 @@ import {
 } from '../utils/projectSalaryUtils';
 import RefreshStatus from '../components/RefreshStatus';
 import { getWorkshopSalary, getWorkshopMonth } from '../utils/workshopUtils';
+import { getCoachIban } from '../utils/coachIban';
+import { getMonthlyGroupRevenue } from '../utils/groupRevenueUtils';
 import {
   canCoachChangeSalaryStatus,
   canMarkSalaryPaid,
@@ -44,11 +46,27 @@ function getSavedMonthValue() {
   return localStorage.getItem('salarySelectedMonth') || getCurrentMonthValue();
 }
 
+function formatMonthValue(monthValue) {
+  const [year, month] = String(monthValue || '').split('-').map(Number);
+  if (!year || !month) return 'Choose month';
+  return new Intl.DateTimeFormat('en', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, month - 1, 1));
+}
+
+function shiftMonthValue(monthValue, offset) {
+  const [year, month] = String(monthValue || '').split('-').map(Number);
+  if (!year || !month) return getCurrentMonthValue();
+  const shifted = new Date(year, month - 1 + offset, 1);
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function getSalarySummaryStorageKey(user, monthValue) {
   if (!user?.role || !monthValue) return null;
 
   const userKey = user.id || user.role;
-  return `salarySummary:v11:${user.role}:${userKey}:${monthValue}`;
+  return `salarySummary:v12:${user.role}:${userKey}:${monthValue}`;
 }
 
 function getSavedSalarySummary(storageKey) {
@@ -191,6 +209,7 @@ function SalaryPage() {
   const [summaryIsStale, setSummaryIsStale] = useState(false);
   const [error, setError] = useState('');
   const [showLessonMoney, setShowLessonMoney] = useState(false);
+  const [expandedRevenueGroups, setExpandedRevenueGroups] = useState(() => new Set());
   const [salaryRecords, setSalaryRecords] = useState([]);
   const [, setWorkflowLoading] = useState(false);
   const [updatingSalaryCoachId, setUpdatingSalaryCoachId] = useState(null);
@@ -203,6 +222,14 @@ function SalaryPage() {
     () => new Map((coaches || []).map(coach => [coach.id, coach.name || coach.id])),
     [coaches]
   );
+  const coachIbans = useMemo(
+    () => new Map((coaches || []).map(coach => [coach.id, getCoachIban(coach)])),
+    [coaches]
+  );
+  const adminCoachIds = useMemo(() => new Set([
+    ...(coaches || []).filter(coach => coach.role === 'admin').map(coach => coach.id),
+    ...(isAdmin && user?.id ? [user.id] : []),
+  ]), [coaches, isAdmin, user?.id]);
   const salarySummaryStorageKey = useMemo(
     () => getSalarySummaryStorageKey(user, selectedMonth),
     [user, selectedMonth]
@@ -262,10 +289,11 @@ function SalaryPage() {
       } : {}),
     }, { merge: true });
 
-    const coachRows = isCoach
+    const coachRows = (isCoach
       ? [salarySummary.myCoachTotal]
-      : salarySummary.coachTotals;
-    await Promise.all(coachRows.filter(row => row?.id).map(row => setDoc(
+      : salarySummary.coachTotals)
+      .filter(row => row?.id && !adminCoachIds.has(row.id));
+    await Promise.all(coachRows.map(row => setDoc(
       doc(monthRef, 'coaches', row.id),
       {
         coachId: row.id,
@@ -278,10 +306,11 @@ function SalaryPage() {
       { merge: true }
     )));
     await loadSalaryRecords();
-  }, [db, isAdmin, isCoach, loadSalaryRecords, salaryMonthDocumentId, selectedMonth]);
+  }, [adminCoachIds, db, isAdmin, isCoach, loadSalaryRecords, salaryMonthDocumentId, selectedMonth]);
 
   const updateSalaryStatus = useCallback(async (coachId, status, issue = '') => {
     if (!salaryMonthDocumentId || !coachId || updatingSalaryCoachId) return;
+    if (adminCoachIds.has(coachId)) return;
     const previousRecords = salaryRecordsRef.current;
     const existingRecord = previousRecords.find(record => record.id === coachId);
     const existingStatus = existingRecord?.status || SALARY_STATUS.PENDING;
@@ -333,6 +362,7 @@ function SalaryPage() {
       setUpdatingSalaryCoachId(null);
     }
   }, [
+    adminCoachIds,
     coachNames,
     db,
     isCoach,
@@ -356,6 +386,7 @@ function SalaryPage() {
 
   useEffect(() => {
     localStorage.setItem('salarySelectedMonth', selectedMonth);
+    setExpandedRevenueGroups(new Set());
   }, [selectedMonth]);
 
   useEffect(() => {
@@ -494,6 +525,7 @@ function SalaryPage() {
 
           const rent = Number(classData?.rent || 0);
           const coachIds = getCoachIdsForClass(classData, group);
+          const payableCoachIds = coachIds.filter(coachId => !adminCoachIds.has(coachId));
 
           if (isCoach && !coachIds.includes(user.id)) {
             continue;
@@ -517,7 +549,8 @@ function SalaryPage() {
             (sum, student) => sum + Number.parseFloat(student?.amount || 0),
             0
           );
-          const classCoachesTotal = coachIds.length * coachPay;
+          const classCoachesTotal = payableCoachIds.length * coachPay;
+          const ownerCoachPay = coachIds.filter(coachId => adminCoachIds.has(coachId)).length * coachPay;
           const classEarned = classGross - rent - classCoachesTotal;
 
           const paidStudentIds = new Set(
@@ -571,6 +604,7 @@ function SalaryPage() {
             gross: classGross,
             rent,
             coaches: classCoachesTotal,
+            ownerCoaches: ownerCoachPay,
             earned: classEarned,
             studentCount,
             coachRate,
@@ -610,12 +644,14 @@ function SalaryPage() {
 
         for (const session of projectSalaryClasses) {
           const coachIds = [session.replacementCoach || project?.coach].filter(Boolean);
+          const payableCoachIds = coachIds.filter(coachId => !adminCoachIds.has(coachId));
           if (isCoach && !coachIds.includes(user.id)) continue;
           const studentCount = session.studentCount;
           const grossPerClass = session.gross;
           const coachRate = session.coachRate;
           const coachPay = session.coachPay;
-          const classCoachesTotal = coachIds.length * coachPay;
+          const classCoachesTotal = payableCoachIds.length * coachPay;
+          const ownerCoachPay = coachIds.filter(coachId => adminCoachIds.has(coachId)).length * coachPay;
           const classEarned = grossPerClass - classCoachesTotal;
 
           grossTotal += grossPerClass;
@@ -647,6 +683,7 @@ function SalaryPage() {
             gross: grossPerClass,
             rent: 0,
             coaches: classCoachesTotal,
+            ownerCoaches: ownerCoachPay,
             earned: classEarned,
             studentCount,
             coachRate,
@@ -670,10 +707,12 @@ function SalaryPage() {
         const workshopPayments = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
         const workshopSalary = getWorkshopSalary({ workshop, payments: workshopPayments, monthValue: runMonth });
         if (!workshopSalary) continue;
+        const payableCoachIds = coachIds.filter(coachId => !adminCoachIds.has(coachId));
+        const payableCoachesTotal = workshopSalary.coachPayEach * payableCoachIds.length;
 
         grossTotal += workshopSalary.gross;
-        coachesTotal += workshopSalary.coachesTotal;
-        workshopEarnedTotal += workshopSalary.ownerEarned;
+        coachesTotal += payableCoachesTotal;
+        workshopEarnedTotal += workshopSalary.gross - payableCoachesTotal;
         coachIds.forEach(coachId => {
           const existing = coachTotals.get(coachId) || { id: coachId, name: coachNames.get(coachId) || coachId, salary: 0, classes: 0, students: 0 };
           coachTotals.set(coachId, {
@@ -715,6 +754,7 @@ function SalaryPage() {
         classes: 0,
         students: 0,
       };
+      const groupRevenue = isAdmin ? getMonthlyGroupRevenue(sortedClassRows) : [];
 
       const nextSummary = {
         generatedAt: Date.now(),
@@ -733,6 +773,7 @@ function SalaryPage() {
         coachTotals: visibleCoachTotals,
         myCoachTotal,
         classRows: sortedClassRows,
+        groupRevenue,
         lessonsByCoach: visibleLessonsByCoach,
       };
 
@@ -767,6 +808,7 @@ function SalaryPage() {
   }, [
     coachNames,
     coaches,
+    adminCoachIds,
     groups,
     groupsLoaded,
     projects,
@@ -776,6 +818,7 @@ function SalaryPage() {
     coachesLoaded,
     db,
     invalidatePastClasses,
+    isAdmin,
     isCoach,
     loadPastClassDocs,
     payments,
@@ -860,6 +903,10 @@ function SalaryPage() {
   ].filter(Boolean).join(' · ');
   const salaryStatusError = salarySourceError || error;
   const salaryIsOutdated = Boolean(summaryIsStale && summary && !isCalculating);
+  const groupRevenue = useMemo(
+    () => isAdmin ? getMonthlyGroupRevenue(summary?.classRows || [], adminCoachIds) : [],
+    [adminCoachIds, isAdmin, summary?.classRows]
+  );
 
   if (!isAdmin && !isCoach) {
     return (
@@ -887,17 +934,37 @@ function SalaryPage() {
       </header>
 
       <div className="salary-controls">
-        <label className="salary-label" htmlFor="salary-month">
-          Month
-        </label>
-        <input
-          id="salary-month"
-          className="salary-month-input"
-          type="month"
-          value={selectedMonth}
-          onChange={(event) => setSelectedMonth(event.target.value)}
-          disabled={isRefreshingData || isCalculating}
-        />
+        <div className="salary-month-picker" aria-label="Salary month">
+          <button
+            type="button"
+            onClick={() => setSelectedMonth(current => shiftMonthValue(current, -1))}
+            disabled={isRefreshingData || isCalculating}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <label className="salary-month-choice" htmlFor="salary-month">
+            <span>Salary month</span>
+            <strong>{formatMonthValue(selectedMonth)}</strong>
+            <input
+              id="salary-month"
+              className="salary-month-input"
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              disabled={isRefreshingData || isCalculating}
+              aria-label="Choose salary month"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setSelectedMonth(current => shiftMonthValue(current, 1))}
+            disabled={isRefreshingData || isCalculating}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
         <RefreshStatus
           message={summary?.generatedAt
             ? `Last updated: ${new Date(summary.generatedAt).toLocaleString()}`
@@ -966,6 +1033,62 @@ function SalaryPage() {
             </div>
           )}
 
+          {isAdmin && (
+            <section className="salary-group-analytics" aria-labelledby="salary-group-analytics-title">
+              <div className="salary-group-analytics-header">
+                <h3 id="salary-group-analytics-title">GROUP RESULTS</h3>
+                <span>{formatMonthValue(selectedMonth)}</span>
+              </div>
+              <ul className="salary-group-results">
+                {groupRevenue.length === 0 ? (
+                  <li className="salary-group-empty">No group classes in this month.</li>
+                ) : (
+                  groupRevenue.map(group => (
+                    <li
+                      key={group.id}
+                      className={`salary-group-result${expandedRevenueGroups.has(group.id) ? ' is-expanded' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedRevenueGroups.has(group.id)}
+                      aria-controls={`salary-group-details-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                      onClick={() => setExpandedRevenueGroups(current =>
+                        current.has(group.id) ? new Set() : new Set([group.id])
+                      )}
+                      onKeyDown={event => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        event.currentTarget.click();
+                      }}
+                    >
+                      <strong>{group.name}</strong>
+                      <span className={group.earned < 0 ? 'is-negative' : ''}>
+                        {group.earned.toFixed(2)}€
+                      </span>
+                      {expandedRevenueGroups.has(group.id) && (
+                        <div
+                          id={`salary-group-details-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                          className="salary-group-result-details"
+                        >
+                          <span>Gross <strong>{group.gross.toFixed(2)}€</strong></span>
+                          <span>Rent <strong>{group.rent.toFixed(2)}€</strong></span>
+                          <span>
+                            Coaches
+                            <strong>{(group.coaches + group.ownerCoaches).toFixed(2)}€</strong>
+                            {group.ownerCoaches > 0 && (
+                              <small>Owner {group.ownerCoaches.toFixed(2)}€ · not deducted</small>
+                            )}
+                          </span>
+                          <span>Classes <strong>{group.classes}</strong></span>
+                          <span>Visits <strong>{group.students}</strong></span>
+                        </div>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          )}
+
           <h3 className="salary-heading">{isAdmin ? 'COACHES' : 'MY SALARY'}</h3>
           {workflowError && <p className="salary-workflow-error">{workflowError}</p>}
           <ul className="salary-list">
@@ -975,25 +1098,30 @@ function SalaryPage() {
               </li>
             ) : (
               summary.coachTotals.map(coach => {
+                const isOwnerCoach = adminCoachIds.has(coach.id);
                 const record = salaryRecords.find(item => item.id === coach.id);
                 const status = record?.status || SALARY_STATUS.PENDING;
                 return (
-                  <li key={coach.id} className={`salary-row salary-coach-row status-${status}`}>
+                  <li key={coach.id} className={`salary-row salary-coach-row ${isOwnerCoach ? 'status-owner' : `status-${status}`}`}>
                     <div className="salary-coach-row-main">
                       <div className="salary-coach-identity">
                         <strong>{coach.name}</strong>
-                        {record?.issue && <span className="salary-coach-issue">⚠ {record.issue}</span>}
+                        {coachIbans.get(coach.id) && (
+                          <span className="salary-coach-iban">{coachIbans.get(coach.id)}</span>
+                        )}
+                        {!isOwnerCoach && record?.issue && <span className="salary-coach-issue">⚠ {record.issue}</span>}
                       </div>
                       <span className="salary-coach-classes">{coach.classes} classes</span>
                       <strong className="salary-coach-amount">{coach.salary.toFixed(2)}€</strong>
                       <div className="salary-coach-state">
-                        {isAdmin && canMarkSalaryPaid(status) && (
+                        {isOwnerCoach && <span className="salary-inline-owner">Owner earnings</span>}
+                        {!isOwnerCoach && isAdmin && canMarkSalaryPaid(status) && (
                           <button type="button" className="salary-inline-paid-button" disabled={updatingSalaryCoachId === coach.id} onClick={() => updateSalaryStatus(coach.id, SALARY_STATUS.PAID)}>
                             {updatingSalaryCoachId === coach.id ? 'Saving…' : 'Mark paid'}
                           </button>
                         )}
-                        {status === SALARY_STATUS.PAID && <span className="salary-inline-paid">✓ Paid</span>}
-                        {isAdmin && status === SALARY_STATUS.NEEDS_REVIEW && <span className="salary-inline-review">Needs review</span>}
+                        {!isOwnerCoach && status === SALARY_STATUS.PAID && <span className="salary-inline-paid">✓ Paid</span>}
+                        {!isOwnerCoach && isAdmin && status === SALARY_STATUS.NEEDS_REVIEW && <span className="salary-inline-review">Needs review</span>}
                       </div>
                     </div>
                     {isCoach && canCoachChangeSalaryStatus(status) && (

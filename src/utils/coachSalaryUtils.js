@@ -1,4 +1,5 @@
 const OPEN_GROUP_SALARY_START = new Date(2026, 6, 1);
+const ALL_GROUP_SALARY_START = new Date(2026, 9, 1);
 
 function parseClassDate(dateStr) {
   const [dd, mm, yyyy] = String(dateStr || '').split('.').map(Number);
@@ -6,11 +7,15 @@ function parseClassDate(dateStr) {
 }
 
 export function getCoachRatePerPerson(group, date, studentCount) {
-  const usesOpenGroupRates =
-    String(group?.type || '').toLowerCase() === 'open' &&
-    parseClassDate(date) >= OPEN_GROUP_SALARY_START;
+  const classDate = parseClassDate(date);
+  const usesAttendanceGrid =
+    classDate >= ALL_GROUP_SALARY_START ||
+    (
+      String(group?.type || '').toLowerCase() === 'open' &&
+      classDate >= OPEN_GROUP_SALARY_START
+    );
 
-  if (!usesOpenGroupRates) return 1;
+  if (!usesAttendanceGrid) return 1;
   if (studentCount >= 10) return 3;
   if (studentCount >= 5) return 2;
   return 1;
