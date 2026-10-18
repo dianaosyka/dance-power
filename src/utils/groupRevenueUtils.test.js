@@ -65,4 +65,24 @@ describe('getMonthlyGroupRevenue', () => {
       },
     ]);
   });
+
+  it('includes each workshop once and subtracts only non-owner coach pay', () => {
+    const workshopRows = [
+      {
+        workshopId: 'ws-1', name: 'Heels intensive', gross: 200,
+        coachId: 'owner-1', coachPay: 40, studentCount: 10,
+      },
+      {
+        workshopId: 'ws-1', name: 'Heels intensive', gross: 200,
+        coachId: 'coach-2', coachPay: 40, studentCount: 10,
+      },
+    ];
+
+    expect(getMonthlyGroupRevenue([], new Set(['owner-1']), workshopRows)).toEqual([
+      {
+        id: 'workshop:ws-1', name: 'Heels intensive', gross: 200, rent: 0,
+        coaches: 40, ownerCoaches: 40, earned: 160, classes: 1, students: 10,
+      },
+    ]);
+  });
 });

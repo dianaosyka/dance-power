@@ -754,7 +754,9 @@ function SalaryPage() {
         classes: 0,
         students: 0,
       };
-      const groupRevenue = isAdmin ? getMonthlyGroupRevenue(sortedClassRows) : [];
+      const groupRevenue = isAdmin
+        ? getMonthlyGroupRevenue(sortedClassRows, adminCoachIds, workshopSalaryRows)
+        : [];
 
       const nextSummary = {
         generatedAt: Date.now(),
@@ -904,8 +906,14 @@ function SalaryPage() {
   const salaryStatusError = salarySourceError || error;
   const salaryIsOutdated = Boolean(summaryIsStale && summary && !isCalculating);
   const groupRevenue = useMemo(
-    () => isAdmin ? getMonthlyGroupRevenue(summary?.classRows || [], adminCoachIds) : [],
-    [adminCoachIds, isAdmin, summary?.classRows]
+    () => isAdmin
+      ? getMonthlyGroupRevenue(
+          summary?.classRows || [],
+          adminCoachIds,
+          summary?.workshopSalaryRows || []
+        )
+      : [],
+    [adminCoachIds, isAdmin, summary?.classRows, summary?.workshopSalaryRows]
   );
 
   if (!isAdmin && !isCoach) {

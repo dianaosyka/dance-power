@@ -1,4 +1,8 @@
-export function getMonthlyGroupRevenue(classRows = [], ownerCoachIds = new Set()) {
+export function getMonthlyGroupRevenue(
+  classRows = [],
+  ownerCoachIds = new Set(),
+  workshopRows = []
+) {
   const groups = new Map();
 
   classRows.forEach(row => {
@@ -39,7 +43,35 @@ export function getMonthlyGroupRevenue(classRows = [], ownerCoachIds = new Set()
     });
   });
 
-  return [...groups.values()].sort((a, b) =>
+  workshopRows.forEach(row => {
+    if (!row?.workshopId) return;
+    const entityId = `workshop:${row.workshopId}`;
+    const current = groups.get(entityId) || {
+      id: entityId,
+      name: row.name || row.workshopId,
+      gross: Number(row.gross || 0),
+      rent: 0,
+      coaches: 0,
+      ownerCoaches: 0,
+      earned: 0,
+      classes: 1,
+      students: Number(row.studentCount || 0),
+    };
+    const coachPay = Number(row.coachPay || 0);
+    const isOwnerCoach = ownerCoachIds.has(row.coachId);
+
+    groups.set(entityId, {
+      ...current,
+      coaches: current.coaches + (isOwnerCoach ? 0 : coachPay),
+      ownerCoaches: current.ownerCoaches + (isOwnerCoach ? coachPay : 0),
+    });
+  });
+
+  return [...groups.values()]
+    .map(item => item.id.startsWith('workshop:')
+      ? { ...item, earned: item.gross - item.coaches }
+      : item)
+    .sort((a, b) =>
     b.earned - a.earned || a.name.localeCompare(b.name)
   );
 }
