@@ -56,7 +56,7 @@ function CreateWorkshopPage() {
     }
   };
 
-  if (user?.role !== 'admin') return <Navigate to="/workshops" replace />;
+  if (user?.role !== 'admin' && user?.role !== 'coach') return <Navigate to="/workshops" replace />;
   return (
     <main className="create-workshop-page"><div className="create-workshop-shell">
       <header className="create-workshop-header">

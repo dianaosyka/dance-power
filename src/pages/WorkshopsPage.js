@@ -20,7 +20,7 @@ function WorkshopsPage() {
   const visible = workshops.filter(item => showHidden || item.hidden !== true)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   return <main className="workshops-page"><div className="workshops-shell">
-    <header className="workshops-header"><button className="workshops-back" onClick={goBack}>← Back</button><div><p>EVENTS</p><h1>Workshops</h1></div>{user?.role === 'admin' ? <button className="workshops-create" onClick={() => navigate('/create-workshop')}>+ Create</button> : <span />}</header>
+    <header className="workshops-header"><button className="workshops-back" onClick={goBack}>← Back</button><div><p>EVENTS</p><h1>Workshops</h1></div>{(user?.role === 'admin' || user?.role === 'coach') ? <button className="workshops-create" onClick={() => navigate('/create-workshop')}>+ Create</button> : <span />}</header>
     <div className="workshops-toolbar"><span>{visible.length} {visible.length === 1 ? 'workshop' : 'workshops'}</span>{user?.role === 'admin' && <label><input type="checkbox" checked={showHidden} onChange={event => setShowHidden(event.target.checked)} /> Show hidden</label>}</div>
     <ul className="workshops-list">{visible.map(workshop => <li key={workshop.id}>
       <button className="workshop-card" onClick={() => navigate(`/workshop/${workshop.id}`)}>

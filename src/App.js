@@ -90,7 +90,7 @@ function AppRoutes() {
       />
       <Route path="/workshops" element={isStaff ? <WorkshopsPage /> : <Navigate to="/" replace />} />
       <Route path="/workshop/:workshopId" element={isStaff ? <WorkshopDetailPage /> : <Navigate to="/" replace />} />
-      <Route path="/create-workshop" element={user.role === 'admin' ? <CreateWorkshopPage /> : <Navigate to="/workshops" replace />} />
+      <Route path="/create-workshop" element={isStaff ? <CreateWorkshopPage /> : <Navigate to="/workshops" replace />} />
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
