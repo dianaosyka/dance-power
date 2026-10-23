@@ -14,6 +14,7 @@ import { useData } from '../context/firebase';
 import { useUser } from '../context/UserContext';
 import { getClassSignedStudentsByPayments } from '../utils/paymentsUtils';
 import { getCoachPayForClass } from '../utils/coachSalaryUtils';
+import { includesSearchText, normalizeSearchText } from '../utils/searchUtils';
 import { invalidateSalarySummaries } from '../utils/salaryCache';
 import {
   invalidateReadCache,
@@ -92,6 +93,7 @@ function GroupClassDetailPage() {
   const [attendanceCompleted, setAttendanceCompleted] = useState(false);
   const [unpaidAttendeeIds, setUnpaidAttendeeIds] = useState([]);
   const [savingUnpaidAttendeeId, setSavingUnpaidAttendeeId] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
   const [savingAttendanceStatus, setSavingAttendanceStatus] = useState(false);
   const [replacement, setReplacement] = useState(null);
   const [replacementCoachId, setReplacementCoachId] = useState('');
@@ -716,6 +718,60 @@ function GroupClassDetailPage() {
     }
   };
 
+  const handleAddStudentFromSearch = async (studentId) => {
+    if (
+      !classExists ||
+      !canEditComment ||
+      classMutationBlocked ||
+      savingUnpaidAttendeeId
+    ) return;
+
+    const isOpenClass = group?.type === 'OPEN';
+    setSavingUnpaidAttendeeId(studentId);
+    try {
+      const nextUnpaidIds = await runTransaction(db, async transaction => {
+        const classSnapshot = await transaction.get(classRef);
+        if (!classSnapshot.exists()) throw new Error('Class does not exist.');
+
+        const groupRef = !isOpenClass ? doc(db, 'groups', groupId) : null;
+        const groupSnapshot = groupRef ? await transaction.get(groupRef) : null;
+        if (groupSnapshot && !groupSnapshot.exists()) throw new Error('Group does not exist.');
+
+        const currentUnpaidIds = Array.isArray(classSnapshot.data()?.unpaidAttendees)
+          ? classSnapshot.data().unpaidAttendees
+          : [];
+        const nextIds = Array.from(new Set([...currentUnpaidIds, studentId]));
+
+        transaction.set(classRef, { unpaidAttendees: nextIds }, { merge: true });
+
+        // Open-class bookings belong only to this class. Closed groups keep
+        // their normal permanent enrollment behaviour as well.
+        if (groupRef && groupSnapshot) {
+          const currentSignedIds = Array.isArray(groupSnapshot.data()?.signedStudents)
+            ? groupSnapshot.data().signedStudents
+            : [];
+          transaction.update(groupRef, {
+            signedStudents: Array.from(new Set([...currentSignedIds, studentId])),
+            signedStudentsUpdatedAt: serverTimestamp(),
+            signedStudentsUpdatedBy: user.id || user.email || '',
+          });
+        }
+
+        return nextIds;
+      });
+
+      setUnpaidAttendeeIds(nextUnpaidIds);
+      setStudentSearch('');
+      updateCachedClass(groupId, date, { unpaidAttendees: nextUnpaidIds });
+      invalidateSalarySummaries();
+    } catch (error) {
+      console.error('Failed to add student to class:', error);
+      alert('❌ Failed to add student to this class');
+    } finally {
+      setSavingUnpaidAttendeeId('');
+    }
+  };
+
   const handleRemoveUnpaidAttendee = (student) => {
     if (!window.confirm(`Remove ${student.name} from the unpaid students list?`)) return;
     handleToggleUnpaidAttendee(student.id);
@@ -910,6 +966,15 @@ function GroupClassDetailPage() {
     .filter(student => Array.isArray(group?.signedStudents) && group.signedStudents.includes(student.id))
     .filter(student => !paidStudentIds.has(student.id) && !unpaidAttendeeIds.includes(student.id))
     .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')));
+  const normalizedStudentSearch = normalizeSearchText(studentSearch.trim());
+  const searchableStudents = normalizedStudentSearch
+    ? students
+        .filter(student => !paidStudentIds.has(student.id) && !unpaidAttendeeIds.includes(student.id))
+        .filter(student => !Array.isArray(group?.signedStudents) || !group.signedStudents.includes(student.id))
+        .filter(student => includesSearchText(student.name || student.email || '', normalizedStudentSearch))
+        .sort((first, second) => String(first.name || '').localeCompare(String(second.name || '')))
+        .slice(0, 8)
+    : [];
 
   if (!classStateReady) {
     return (
@@ -1219,6 +1284,47 @@ function GroupClassDetailPage() {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+      {classExists && !isCanceled && canEditComment && (
+        <section className="class-student-search">
+          <label htmlFor="class-student-search-input">
+            <span>Not in the group?</span>
+            <small>
+              {group?.type === 'OPEN'
+                ? 'Add a one-time unpaid booking for this class only.'
+                : 'Add the student to this class and permanently to the group.'}
+            </small>
+          </label>
+          <input
+            id="class-student-search-input"
+            type="search"
+            value={studentSearch}
+            onChange={event => setStudentSearch(event.target.value)}
+            placeholder="Search all students…"
+            disabled={classMutationBlocked || Boolean(savingUnpaidAttendeeId)}
+          />
+          {normalizedStudentSearch && (
+            <ul className="class-student-search-results">
+              {searchableStudents.length === 0 ? (
+                <li className="class-student-search-empty">No students found.</li>
+              ) : searchableStudents.map(student => (
+                <li key={student.id}>
+                  <button type="button" onClick={() => navigate(`/student/${student.id}`)}>
+                    {student.name || student.email || student.id}
+                  </button>
+                  <button
+                    type="button"
+                    className="unpaid-add-button"
+                    onClick={() => handleAddStudentFromSearch(student.id)}
+                    disabled={classMutationBlocked || Boolean(savingUnpaidAttendeeId)}
+                  >
+                    {savingUnpaidAttendeeId === student.id ? 'Adding…' : '+ Add unpaid'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
       {classExists && (
